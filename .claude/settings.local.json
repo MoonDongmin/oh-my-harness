@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude plugins:*)",
+      "Bash(grep -E \"\\\\.\\(js|ts|sh\\)$\")"
+    ]
+  }
+}

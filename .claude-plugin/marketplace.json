@@ -1,0 +1,15 @@
+{
+  "name": "oh-my-harness",
+  "owner": {
+    "name": "MoonDongmin"
+  },
+  "plugins": [
+    {
+      "name": "oh-my-harness",
+      "source": {
+        "source": "github",
+        "repo": "MoonDongmin/oh-my-harness"
+      }
+    }
+  ]
+}

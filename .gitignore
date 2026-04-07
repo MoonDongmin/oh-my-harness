@@ -1,0 +1,6 @@
+node_modules/
+.dongmin/
+.omc/state/
+*.log
+.DS_Store
+.idea

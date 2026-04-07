@@ -1,0 +1,9 @@
+{
+  "name": "oh-my-harness",
+  "version": "0.1.0",
+  "description": "Agent team builder: auto-generate project-specific agent teams with Claude + Codex providers",
+  "author": {
+    "name": "dongmin"
+  },
+  "license": "MIT"
+}
