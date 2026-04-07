@@ -7,7 +7,8 @@
  * Simplified from oh-my-claudecode's 690-line version to ~100 lines.
  *
  * Supported keywords:
- * 1. harness: 하네스 만들어줘, 하네스 구성, 하네스 설계, harness
+ * 1. tdd: TDD로 구현해줘, 테스트 주도, Red-Green-Refactor, 구현해줘 (하네스 존재 시)
+ * 2. harness: 하네스 만들어줘, 하네스 구성, 하네스 설계, harness
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -80,15 +81,21 @@ function createOutput(additionalContext) {
 /** Keyword definitions: pattern → skill name, optional condition */
 const KEYWORDS = [
   {
-    name: "harness",
+    name: "tdd",
     pattern:
-      /(?:하네스\s*(?:만들어|구성|구축|설계|점검|감사))|(?:\bharness\b)|(?:\bbuild\s+harness\b)|(?:oh-my-harness)|(?:에이전트\s*팀?\s*(?:구성|세팅|셋업|빌드))/iu,
+      /(?:tdd\s*(?:로|로\s*구현|워크플로우))|(?:\btdd\b)|(?:테스트\s*(?:주도|먼저|퍼스트))|(?:red[-\s]?green[-\s]?refactor)|(?:레드\s*그린)/iu,
+    condition: () => existsSync(join(process.cwd(), ".claude", "agents")),
+  },
+  {
+    name: "tdd",
+    pattern:
+      /(?:구현\s*해\s*줘|개발\s*해\s*줘|작업\s*(?:시작|해\s*줘)|만들어\s*줘)/iu,
+    condition: () => existsSync(join(process.cwd(), ".claude", "agents")),
   },
   {
     name: "harness",
     pattern:
-      /(?:구현\s*해\s*줘|개발\s*해\s*줘|작업\s*(?:시작|해\s*줘)|만들어\s*줘)/iu,
-    condition: () => existsSync(join(process.cwd(), ".claude", "agents")),
+      /(?:하네스\s*(?:만들어|구성|구축|설계|점검|감사))|(?:\bharness\b)|(?:\bbuild\s+harness\b)|(?:oh-my-harness)|(?:에이전트\s*팀?\s*(?:구성|세팅|셋업|빌드))/iu,
   },
 ];
 
