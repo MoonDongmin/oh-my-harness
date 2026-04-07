@@ -1,6 +1,6 @@
 ---
 name: harness
-description: "프로젝트에 에이전트 팀을 구축하는 하네스 빌더. 코어 6 에이전트(architect, test-engineer, executor, code-reviewer, security-reviewer, debugger)를 필수 생성하고, 프로젝트 분석 후 추가 에이전트/스킬을 자동 생성한다. (1) '하네스 만들어줘', '하네스 구성해줘', '하네스 구축해줘' 요청 시, (2) '하네스 설계', '하네스 엔지니어링' 요청 시, (3) 새 프로젝트에 에이전트 팀을 세팅할 때, (4) 기존 하네스를 확장하거나 유지보수할 때, (5) 'harness 만들어줘', 'build harness' 등 영문 트리거에도 반응."
+description: "프로젝트에 에이전트 팀을 구축하는 하네스 빌더. 코어 6 에이전트(architect, test-engineer, executor, code-reviewer, security-reviewer, debugger)를 필수 생성하고, 프로젝트 분석 후 추가 에이전트/스킬을 자동 생성한다. (1) '하네스 만들어줘', '하네스 구성해줘', '하네스 구축해줘' 요청 시, (2) '하네스 설계', '하네스 엔지니어링' 요청 시, (3) 새 프로젝트에 에이전트 팀을 세팅할 때, (4) 기존 하네스를 확장하거나 유지보수할 때, (5) 'harness 만들어줘', 'build harness', 'oh-my-harness' 등 영문 트리거에도 반응, (6) '에이전트 팀 구성해줘', '팀 세팅해줘' 요청 시, (7) 기존 하네스가 있는 프로젝트에서 '구현해줘', '개발해줘', '작업 시작' 등 작업 위임 요청 시."
 allowed-tools: Read Glob Grep "Bash(git *)" "Bash(ls *)"
 ---
 
@@ -27,17 +27,17 @@ allowed-tools: Read Glob Grep "Bash(git *)" "Bash(ls *)"
 
 | Agent | 역할 | 기본 권장 모델 |
 |-------|------|---------------|
-| architect | 설계, 아키텍처 분석, DDD/Hex 가이드 | Opus (사고/추론) |
-| test-engineer | TDD 테스트 작성, 커버리지 | Codex (코딩) |
-| executor | 코드 구현, 최소 diff | Codex (코딩) |
-| code-reviewer | 코드 리뷰, SOLID, 품질 | Opus (사고/추론) |
-| security-reviewer | OWASP Top 10, 시크릿 스캔 | Opus (사고/추론) |
-| debugger | 루트 원인 분석, 빌드 에러 해결 | Codex (코딩) |
+| 🏛 architect | 설계, 아키텍처 분석, DDD/Hex 가이드 | Opus (사고/추론) |
+| 🧪 test-engineer | TDD 테스트 작성, 커버리지 | Codex (코딩) |
+| ⚡ executor | 코드 구현, 최소 diff | Codex (코딩) |
+| 🔍 code-reviewer | 코드 리뷰, SOLID, 품질 | Opus (사고/추론) |
+| 🛡 security-reviewer | OWASP Top 10, 시크릿 스캔 | Opus (사고/추론) |
+| 🐛 debugger | 루트 원인 분석, 빌드 에러 해결 | Codex (코딩) |
 
 **모델 매핑:**
 - **Opus** → `provider: claude`, `model: claude-opus-4-6` — 깊은 사고·추론
 - **Sonnet** → `provider: claude`, `model: claude-sonnet-4-6` — 빠른 응답·균형 성능
-- **Codex** → `provider: codex`, `model: gpt-5.4` — 코딩 특화 (`codex exec --full-auto`)
+- **Codex** → `provider: claude`, `model: claude-sonnet-4-6` — Codex CLI 위임 에이전트 (내부적으로 `Bash(codex exec --full-auto)` 호출)
 - **Custom** → 사용자가 직접 provider/model 지정
 
 ---
@@ -66,7 +66,7 @@ allowed-tools: Read Glob Grep "Bash(git *)" "Bash(ls *)"
 
 #### 1-1. 모델 선택 질문
 
-에이전트별로 모델을 선택할 수 있도록 AskUserQuestion 도구로 질문한다. 사용자가 에이전트 성격에 맞는 모델을 직접 고를 수 있게 선택지를 제시한다.
+에이전트를 **하나씩 순차적으로** 소개하고, 각각에 대해 모델을 선택받는다. AskUserQuestion 도구를 에이전트당 1회씩 호출한다.
 
 **모델 선택지:**
 
@@ -74,44 +74,81 @@ allowed-tools: Read Glob Grep "Bash(git *)" "Bash(ls *)"
 |------|------|----------|----------|------|
 | **[O] Opus** | Claude Opus 4.6 | claude | claude-opus-4-6 | 깊은 사고·추론·분석 |
 | **[S] Sonnet** | Claude Sonnet 4.6 | claude | claude-sonnet-4-6 | 빠른 응답·균형 잡힌 성능 |
-| **[C] Codex** | GPT-5.4 (Codex CLI) | codex | gpt-5.4 | 코딩 특화·자동 실행 |
+| **[C] Codex** | GPT-5.4 (Codex CLI) | claude | claude-sonnet-4-6 | Codex CLI 위임 (`codex exec --full-auto`) |
 | **[X] Custom** | 사용자 지정 | — | — | 사용자가 직접 provider/model 설명 |
 
-**질문 형식 (AskUserQuestion 도구 사용):**
+**순차 질문 플로우:**
+
+코어 6 에이전트를 아래 순서대로, 한 번에 하나씩 AskUserQuestion으로 질문한다. 각 질문에서 해당 에이전트의 역할과 추천 모델을 설명하고, 사용자가 선택하면 다음 에이전트로 넘어간다.
+
+**질문 형식 (에이전트당 1회):**
 ```
-각 에이전트의 모델을 선택해주세요.
+[1/6] 🏛 architect — 설계·아키텍처 분석
+추천: [O] Opus (깊은 사고·추론)
+
 [O] Opus  [S] Sonnet  [C] Codex  [X] Custom
 
- #  에이전트             역할                추천
- 1. architect           설계·아키텍처 분석    [O]
- 2. test-engineer       TDD 테스트 작성      [C]
- 3. executor            코드 구현            [C]
- 4. code-reviewer       코드 리뷰·SOLID      [O]
- 5. security-reviewer   보안 리뷰            [O]
- 6. debugger            디버깅·에러 해결      [C]
-
-예시 답변:
-• "추천대로" → 모두 추천 모델 사용
-• "전부 Opus" → 6개 모두 Opus
-• "1O 2C 3C 4S 5O 6C" → 개별 지정
-• "3번은 Custom: Gemini 2.5 Pro 사용" → Custom 설명
+모델을 선택해주세요 (엔터 = 추천대로):
 ```
 
+**에이전트 순서와 추천값:**
+
+| 순서 | 에이전트 | 역할 | 추천 |
+|------|---------|------|------|
+| 1/6 | 🏛 architect | 설계·아키텍처 분석 | [O] Opus |
+| 2/6 | 🧪 test-engineer | TDD 테스트 작성 | [C] Codex |
+| 3/6 | ⚡ executor | 코드 구현 | [C] Codex |
+| 4/6 | 🔍 code-reviewer | 코드 리뷰·SOLID | [O] Opus |
+| 5/6 | 🛡 security-reviewer | 보안 리뷰 | [O] Opus |
+| 6/6 | 🐛 debugger | 디버깅·에러 해결 | [C] Codex |
+
 **사용자 응답 해석 규칙:**
-- "기본값", "추천대로", "기본으로" → 추천 모델 그대로 사용
-- "전부 X" → 6개 모두 해당 모델
-- "N번 X" 또는 "NX" → 해당 에이전트만 변경, 나머지 추천값 유지
-- Custom 선택 시 → 사용자가 추가 설명한 내용을 에이전트 정의의 provider/model 섹션에 반영
+- 빈 입력 또는 "추천", "추천대로", "엔터" → 해당 에이전트의 추천 모델 사용
+- "O", "Opus" → Opus 선택
+- "S", "Sonnet" → Sonnet 선택
+- "C", "Codex" → Codex 선택
+- "X", "Custom" → 추가 질문으로 provider/model 정보를 입력받음
+- "전부 X", "나머지 전부 X" → 현재 에이전트부터 남은 에이전트 모두 해당 모델 적용 (남은 질문 스킵)
+
+**Custom 선택 시 추가 질문:**
+```
+Custom 모델을 지정해주세요.
+예: "Gemini 2.5 Pro", "grok-3" 등
+provider와 model ID를 알면 함께 입력해주세요:
+```
+
+**모든 선택 완료 후 확인:**
+
+6개 에이전트의 모델 선택이 끝나면, 최종 구성을 요약하여 확인(submit)을 받는다.
+
+```
+✅ 에이전트 모델 구성 확인
+
+ #  에이전트                  모델
+ 1. 🏛 architect             Opus
+ 2. 🧪 test-engineer         Codex
+ 3. ⚡ executor              Codex
+ 4. 🔍 code-reviewer         Opus
+ 5. 🛡 security-reviewer     Opus
+ 6. 🐛 debugger              Codex
+
+이대로 진행할까요? (Y/n):
+```
+
+- "Y", "네", 빈 입력 → Phase 1-2로 진행
+- "N", "아니오" → 변경할 에이전트 번호를 물어보고 해당 에이전트만 재선택
 
 #### 1-2. 에이전트 정의 파일 생성
 
-각 에이전트를 `프로젝트/.claude/agents/{name}.md`에 생성한다. 파일 구조:
+각 에이전트를 `프로젝트/.claude/agents/{name}.md`에 생성한다.
+
+**Claude 에이전트 템플릿 (Opus/Sonnet 선택 시):**
 
 ```markdown
 ---
 description: {역할 한 줄 설명}
-provider: {claude 또는 codex}
-model: {claude-opus-4-6 또는 claude-sonnet-4-6 또는 gpt-5.4}
+provider: claude
+model: {claude-opus-4-6 또는 claude-sonnet-4-6}
 ---
 
 # {Agent Name}
@@ -123,9 +160,39 @@ model: {claude-opus-4-6 또는 claude-sonnet-4-6 또는 gpt-5.4}
 {에이전트가 따라야 할 원칙들}
 
 ## 도구 사용
-{사용 가능한 도구와 제한 사항}
-- Claude 에이전트 (Opus/Sonnet): Claude Code의 Read/Grep/Glob 등 사용
-- Codex 에이전트: Codex CLI를 통해 코드 작성 (`codex exec --full-auto`)
+Claude Code의 Read/Grep/Glob/Edit/Write/Bash 등 사용
+
+## 출력 형식
+{에이전트의 산출물 규격}
+```
+
+**Codex CLI 위임 에이전트 템플릿 (Codex 선택 시):**
+
+```markdown
+---
+description: {역할 한 줄 설명}
+provider: claude
+model: claude-sonnet-4-6
+---
+
+# {Agent Name} (Codex CLI)
+
+## 핵심 역할
+{에이전트의 주요 책임}
+
+## 실행 방식
+이 에이전트는 Codex CLI를 통해 작업을 수행한다.
+모든 코드 작성/수정 작업은 반드시 아래 형식으로 Codex CLI에 위임한다:
+
+\`\`\`bash
+codex exec --full-auto "{구체적 작업 지시 — 파일 경로, 함수명, 기대 동작 포함}"
+\`\`\`
+
+### Codex CLI 호출 규칙
+1. 작업 지시는 구체적이고 명확하게 작성한다 (파일 경로, 함수명, 기대 동작 포함)
+2. 한 번에 하나의 명확한 작업만 위임한다
+3. Codex CLI 실행 결과를 확인하고 검증한다
+4. `codex` 명령어가 없으면 사용자에게 안내: "Codex CLI가 설치되어 있지 않습니다. `npm install -g @openai/codex`로 설치 후 `codex login`으로 로그인해주세요."
 
 ## 출력 형식
 {에이전트의 산출물 규격}

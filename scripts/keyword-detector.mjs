@@ -77,12 +77,18 @@ function createOutput(additionalContext) {
   };
 }
 
-/** Keyword definitions: pattern → skill name */
+/** Keyword definitions: pattern → skill name, optional condition */
 const KEYWORDS = [
   {
     name: "harness",
     pattern:
-      /(?:하네스\s*(?:만들어|구성|구축|설계|점검|감사))|(?:\bharness\b)|(?:\bbuild\s+harness\b)/iu,
+      /(?:하네스\s*(?:만들어|구성|구축|설계|점검|감사))|(?:\bharness\b)|(?:\bbuild\s+harness\b)|(?:oh-my-harness)|(?:에이전트\s*팀?\s*(?:구성|세팅|셋업|빌드))/iu,
+  },
+  {
+    name: "harness",
+    pattern:
+      /(?:구현\s*해\s*줘|개발\s*해\s*줘|작업\s*(?:시작|해\s*줘)|만들어\s*줘)/iu,
+    condition: () => existsSync(join(process.cwd(), ".claude", "agents")),
   },
 ];
 
@@ -106,6 +112,7 @@ async function main() {
     for (const kw of KEYWORDS) {
       const match = kw.pattern.exec(clean);
       if (match && !isInformational(clean, match.index)) {
+        if (kw.condition && !kw.condition()) continue;
         const content = loadSkillContent(kw.name);
         if (content) {
           const ctx = `[MAGIC KEYWORD: ${kw.name.toUpperCase()}]\n\n${content}\n\n---\nUser request:\n${prompt}`;

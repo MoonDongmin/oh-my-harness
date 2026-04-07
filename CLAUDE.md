@@ -18,7 +18,7 @@
 **모델 매핑:**
 - Opus → `provider: claude`, `model: claude-opus-4-6` (깊은 사고·추론)
 - Sonnet → `provider: claude`, `model: claude-sonnet-4-6` (빠른 응답·균형 성능)
-- Codex → `provider: codex`, `model: gpt-5.4` (Codex CLI: `codex exec --full-auto`)
+- Codex → `provider: claude`, `model: claude-sonnet-4-6` (Codex CLI 위임: `Bash(codex exec --full-auto)`)
 - Custom → 사용자 지정 provider/model
 
 추가 에이전트 (planner, analyst, critic 등)는 프로젝트 분석 후 harness가 자동 생성.
@@ -35,4 +35,6 @@
 | 키워드 | 스킬 |
 |--------|------|
 | 하네스 만들어줘, 하네스 구성, 하네스 설계 | harness |
+| oh-my-harness, 에이전트 팀 구성/세팅/빌드 | harness |
+| 구현해줘, 개발해줘, 작업 시작 (하네스 존재 시) | harness (오케스트레이터) |
 | 검증해줘, 확인해봐 | verify |
