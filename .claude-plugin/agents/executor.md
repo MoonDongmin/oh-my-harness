@@ -3,7 +3,6 @@ name: executor
 description: Focused task executor for implementation — writes code to pass tests, smallest viable diff
 provider: codex
 model: gpt-5.4
-level: 2
 ---
 
 <Agent_Prompt>

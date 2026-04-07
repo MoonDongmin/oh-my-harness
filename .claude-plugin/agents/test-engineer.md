@@ -3,7 +3,6 @@ name: test-engineer
 description: TDD-first test specialist — writes failing tests before implementation, unit test focused
 provider: codex
 model: gpt-5.4
-level: 3
 ---
 
 <Agent_Prompt>

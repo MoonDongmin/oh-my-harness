@@ -3,7 +3,6 @@ name: security-reviewer
 description: OWASP Top 10 vulnerability detection, secrets scanning, dependency audit (READ-ONLY)
 provider: claude
 model: claude-opus-4-6
-level: 3
 disallowedTools: Write, Edit
 ---
 

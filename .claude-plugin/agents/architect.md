@@ -3,7 +3,6 @@ name: architect
 description: Strategic Architecture & Debugging Advisor — code analysis, root cause diagnosis, DDD/Hexagonal guidance (READ-ONLY)
 provider: claude
 model: claude-opus-4-6
-level: 3
 disallowedTools: Write, Edit
 ---
 

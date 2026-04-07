@@ -3,7 +3,6 @@ name: code-reviewer
 description: Severity-rated code review — logic defects, SOLID checks, security, performance, spec compliance (READ-ONLY)
 provider: claude
 model: claude-opus-4-6
-level: 3
 disallowedTools: Write, Edit
 ---
 

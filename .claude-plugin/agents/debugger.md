@@ -3,7 +3,6 @@ name: debugger
 description: Root-cause analysis, regression isolation, build/compilation error resolution — minimal fix specialist
 provider: codex
 model: gpt-5.4
-level: 3
 ---
 
 <Agent_Prompt>
