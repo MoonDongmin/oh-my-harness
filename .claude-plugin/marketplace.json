@@ -6,10 +6,9 @@
   "plugins": [
     {
       "name": "oh-my-harness",
-      "source": {
-        "source": "github",
-        "repo": "MoonDongmin/oh-my-harness"
-      }
+      "source": "./",
+      "description": "Agent team builder: auto-generate project-specific agent teams with Claude + Codex providers",
+      "version": "0.1.0"
     }
   ]
 }

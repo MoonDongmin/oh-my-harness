@@ -234,7 +234,8 @@ Each agent's model is chosen during harness build:
 ```
 oh-my-harness/
 ├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest
+│   ├── plugin.json              # Plugin manifest
+│   └── marketplace.json         # Marketplace registry
 ├── agents/                      # Core 6 agent templates
 │   ├── architect.md
 │   ├── test-engineer.md
