@@ -14,11 +14,17 @@
   └──── 공유 작업 목록 ────┘
 ```
 
-**핵심 도구:**
-- `TeamCreate`: 팀 생성 + 팀원 스폰
-- `SendMessage({to: name})`: 특정 팀원에게 메시지
-- `SendMessage({to: "all"})`: 브로드캐스트 (비용 높음, 드물게)
-- `TaskCreate`/`TaskUpdate`: 공유 작업 목록 관리
+**핵심 도구 (올바른 호출 순서):**
+1. `TeamCreate(team_name: "...")`: 팀 생성 (team_name만 받음, members 파라미터 없음)
+2. `Agent(subagent_type: "...", name: "...", team_name: "...", model: "opus", prompt: "...")`: 각 팀원을 개별 스폰
+3. `TaskCreate(subject: "...", description: "...")`: 작업 하나씩 등록
+4. `SendMessage({to: name})`: 특정 팀원에게 메시지
+5. `SendMessage({to: "all"})`: 브로드캐스트 (비용 높음, 드물게)
+6. `TaskUpdate`: 작업 상태·의존성·담당자 업데이트
+
+**⚠️ 잘못된 패턴 (사용 금지):**
+- `TeamCreate(members: [...])` — members 파라미터는 존재하지 않음
+- `TaskCreate(tasks: [...])` — tasks 배열 파라미터는 존재하지 않음
 
 **특징:**
 - 팀원끼리 직접 대화, 도전, 검증 가능
