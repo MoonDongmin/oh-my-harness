@@ -8,7 +8,8 @@
  *
  * Supported keywords:
  * 1. tdd: TDD로 구현해줘, 테스트 주도, Red-Green-Refactor, 구현해줘 (하네스 존재 시)
- * 2. harness: 하네스 만들어줘, 하네스 구성, 하네스 설계, harness
+ * 2. implement: 팀으로 구현, 리팩토링, 구조 변경, 대규모 변경, 아키텍처 변경 (하네스 존재 시)
+ * 3. harness: 하네스 만들어줘, 하네스 구성, 하네스 설계, harness
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -78,7 +79,15 @@ function createOutput(additionalContext) {
   };
 }
 
-/** Keyword definitions: pattern → skill name, optional condition */
+/**
+ * Keyword definitions: pattern → skill name, optional condition.
+ *
+ * Order matters — first match wins. The order is:
+ *   1. Specific tdd keywords (TDD, Red-Green-Refactor, 테스트 주도)
+ *   2. Specific implement keywords (팀으로, 리팩토링, 구조 변경, 마이그레이션)
+ *   3. harness (to catch "하네스 만들어줘" before the broad tdd pattern does)
+ *   4. Broad development keywords (구현해줘, 만들어줘) → tdd fallback
+ */
 const KEYWORDS = [
   {
     name: "tdd",
@@ -87,15 +96,21 @@ const KEYWORDS = [
     condition: () => existsSync(join(process.cwd(), ".claude", "agents")),
   },
   {
-    name: "tdd",
+    name: "implement",
     pattern:
-      /(?:구현\s*해\s*줘|개발\s*해\s*줘|작업\s*(?:시작|해\s*줘)|만들어\s*줘)/iu,
+      /(?:팀\s*으로\s*(?:구현|개발|작업|만들어))|(?:에이전트\s*팀\s*(?:으로|활용))|(?:\bteam[\s-]?work\b)|(?:팀\s*워크)|(?:리팩토링\s*해\s*줘)|(?:대규모\s*(?:변경|리팩토링|마이그레이션|작업))|(?:구조\s*(?:변경|개선))|(?:아키텍처\s*변경)|(?:마이그레이션\s*해\s*줘)/iu,
     condition: () => existsSync(join(process.cwd(), ".claude", "agents")),
   },
   {
     name: "harness",
     pattern:
       /(?:하네스\s*(?:만들어|구성|구축|설계|점검|감사))|(?:\bharness\b)|(?:\bbuild\s+harness\b)|(?:oh-my-harness)|(?:에이전트\s*팀?\s*(?:구성|세팅|셋업|빌드))/iu,
+  },
+  {
+    name: "tdd",
+    pattern:
+      /(?:구현\s*해\s*줘|개발\s*해\s*줘|작업\s*(?:시작|해\s*줘)|만들어\s*줘)/iu,
+    condition: () => existsSync(join(process.cwd(), ".claude", "agents")),
   },
 ];
 

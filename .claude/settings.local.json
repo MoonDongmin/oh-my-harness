@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(claude plugins:*)",
-      "Bash(grep -E \"\\\\.\\(js|ts|sh\\)$\")"
+      "Bash(grep -E \"\\\\.\\(js|ts|sh\\)$\")",
+      "Bash(wc:*)",
+      "Bash(node -e ':*)",
+      "Bash(mkdir -p /tmp/test-harness/.claude/agents)",
+      "Bash(touch /tmp/test-harness/.claude/agents/test.md)",
+      "Read(//tmp/**)",
+      "Bash(node /Users/dongmin/Developments/claude/oh-my-harness/scripts/keyword-detector.mjs)"
     ]
   }
 }
