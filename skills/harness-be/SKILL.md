@@ -12,7 +12,7 @@ allowed-tools: Read Glob Grep "Bash(git *)" "Bash(ls *)"
 1. 백엔드 프로젝트를 스캔해 구조화된 감지 객체 생성 (language/framework/architecture_style/data_layer/api_style/test_stack/module_pattern/domain_terms)
 2. 코어 6 에이전트 + 리더 2를 `<Project_Context>` 주입과 함께 생성
 3. 감지 결과에 조건부로 매칭되는 전문가 에이전트(domain-expert/api-specialist/data-engineer/infra-reviewer/monorepo-coordinator/qa-agent) 합성
-4. 감지 결과 기반 스킬 생성 (test-scaffold/migration-check/api-workflow/cross-package/config-sync 등)
+4. 프로젝트 반복 패턴 기반 스킬 후보 도출 → 사용자 승인 게이트 → 선택된 것만 도메인 용어 유도 이름으로 생성 (0개도 정상)
 5. CLAUDE.md에 `harness-fingerprint` 블록 등록 — tdd/implement 스킬이 나중에 읽어서 재사용
 
 ## 호출 패턴
@@ -135,26 +135,89 @@ AskUserQuestion으로 사용자에게 묻는다:
 
 각 전문가 에이전트의 프롬프트에는 Phase 1에서 수집한 **실제 경로, 파일명, 도메인 용어**를 최소 3개 이상 주입한다. 제네릭 전문가("DDD 전문가")는 생성하지 않는다.
 
-### Phase 5: 스킬 생성
+### Phase 5: 스킬 생성 (사용자 승인 게이트)
 
-감지 결과 기반 조건부 스킬 매트릭스:
+> **핵심 변화**: 이전에는 고정된 "조건 → 스킬 이름" 매트릭스로 자동 생성했지만, 이 방식은 사용자가 안 쓰는 제네릭 스킬을 양산했다. 이제는 **후보 도출 → 사용자 승인 → 선택된 것만 생성** 흐름이다. **0개 생성도 정상 종료**다.
 
-| 감지 조건 | 생성 스킬 | 용도 |
-|---|---|---|
-| 같은 구조의 모듈 디렉토리 3개+ 반복 | `{project}-scaffold` | 프로젝트 컨벤션에 맞는 새 모듈 스캐폴딩 |
-| `data_layer ≠ none` AND 마이그레이션 디렉토리 존재 | `migration-check` | 마이그레이션 안전성 검증 |
-| 일관된 테스트 파일 패턴 | `test-scaffold` | 기존 테스트 패턴대로 골격 생성 |
-| `api_style ≠ none` AND 라우터 파일 ≥ 3개 | `api-workflow` | API 설계 → 구현 → 테스트 → 문서화 파이프라인 |
-| `architecture_style ∈ {hexagonal, clean, modular-monolith}` | `domain-check` | 도메인 모델 무결성 검증 |
-| 모노레포 | `cross-package` | 패키지 간 영향도 분석 |
-| `.github/workflows/` 존재 | `pipeline-check` | CI 파이프라인 영향도 확인 |
-| `.env.*` 파일 3개+ | `config-sync` | 환경별 설정 일관성 검증 |
+#### Step 1 — 가이드 로드 (필수)
 
-스킬 개수는 3-5개가 적정. 너무 많으면 컨텍스트 부담이 된다. 프론트엔드 전용 스킬(`ui-workflow`, `a11y-check`, `bundle-budget`)은 **harness-be에서 생성하지 않는다**.
+다음 두 파일을 반드시 Read한다. 이 단계를 건너뛰면 LLM이 매트릭스 매칭 모드로 빠진다.
 
-### Phase 6: CLAUDE.md 하네스 컨텍스트 + Fingerprint 등록
+- `../harness/references/skill-generation-guide.md` — 후보 도출 5단계 절차 + 네이밍 금지 목록 + 사용자 게이트 형식
+- `../harness/references/skill-writing-guide.md` — 스킬 본문 작성 원칙 (Description pushy, Why-First, 명령형)
 
-프로젝트의 `CLAUDE.md`에 하네스 컨텍스트를 추가한다. **반드시 `<!-- harness-fingerprint v1 -->` 블록도 함께 작성**한다. 이 블록은 tdd/implement 스킬이 파이프라인 실행 시 읽어서 재활용한다.
+#### Step 2 — 후보 도출 (3단계 유도, 4개 상한)
+
+가이드 §1의 5단계 탐색(Step A-E)을 그대로 따른다. 요약:
+
+1. **관찰**: Phase 1 감지 객체(`module_pattern`, `existing_modules`, `domain_terms`, `notable_files`)와 실제 디렉토리 트리를 다시 본다
+2. **가설**: "이 프로젝트의 사람이 한 달 안에 같은 일을 3번+ 할 작업"을 자유 문장으로 5-8개 (이 단계에 이름 짓지 말 것)
+3. **검증**: 각 가설이 실제 파일로 1-2개 확인되는지 체크. 검증 안 되면 버림
+4. **이름 짓기**: 살아남은 가설마다 스킬 이름을 **프로젝트 모듈명·도메인 용어·실제 디렉토리 이름에서 직접 유도**
+5. **필터링**: §2 판단 기준으로 거른 뒤 **최대 4개로 줄임** (단일 `AskUserQuestion` 옵션 4개 상한 + 결정 피로 완화)
+
+> ⚠️ **네이밍 인라인 경고**: 후보 이름이 `migration-check`, `api-workflow`, `domain-check`, `cross-package`, `pipeline-check`, `config-sync`, `test-scaffold` 같은 제네릭 일반명사면 **즉시 reject하고 다시 명명**한다. 이 이름들은 가이드 §6 네이밍 금지 목록에 박혀있다. 어떤 NestJS 프로젝트에도 통하는 이름은 이 프로젝트에 통하지 않는다.
+
+#### Step 3 — 사용자 승인 게이트 (필수)
+
+후보가 1개 이상이면 `AskUserQuestion`(multiSelect=true)으로 사용자에게 묻는다. 후보가 0개면 이 단계를 건너뛰고 사용자에게 "이번 빌드에 자동 생성할 만한 반복 패턴을 못 찾았다"고 한 줄로 알린 뒤 Phase 6으로 직진.
+
+```
+question: "이 프로젝트에서 자동 생성할 보조 스킬을 선택해줘. 0개 선택도 OK."
+header:   "스킬 후보"
+multiSelect: true
+options: [최대 4개]
+```
+
+각 옵션 description은 **3요소 필수** (가이드 §7):
+
+```
+label: order-field-sync
+description: "src/modules/order/ 작업 시 prisma·migration·dto·controller 4곳 동기화.
+              증거: 기존 order/invoice/subscription 3개 모듈이 같은 패턴 반복.
+              트리거: '주문 필드 추가', '주문 마이그레이션', 'order schema'.
+              주입 컨텍스트: src/modules/order/, prisma/schema.prisma."
+```
+
+사용자가 0개 선택해도 정상 — Step 4를 건너뛰고 Step 5로.
+
+#### Step 4 — 선택된 스킬 본문 작성
+
+사용자가 선택한 후보에 대해서만 `{프로젝트}/.claude/skills/{name}/SKILL.md`를 생성한다.
+
+각 스킬 작성 시:
+1. **Description**: 가이드 §3 + skill-writing-guide §1의 pushy 트리거 원칙. 트리거 키워드 3개 이상 + 경계 조건 명시
+2. **본문 주입**: Phase 1 감지 객체에서 **실제 파일 경로·import 패턴·모듈명·도메인 용어를 최소 3개** 본문에 박는다. 어떤 필드를 어떻게 박는지는 `references/backend-prompt-injection-guide.md`의 "스킬 본문 주입 규칙" 섹션 참조
+3. **본문 작성 원칙**: Why-First (ALWAYS/NEVER 금지) / Lean (500줄 이내) / 명령형 ("~한다"/"~하라")
+4. **500줄 초과 시**: `references/`로 분리하고 본문에 포인터만 남김
+
+#### Step 5 — CLAUDE.md 임시 동기화
+
+생성된 스킬 디렉토리 트리만 CLAUDE.md에 즉시 기록한다 (Phase 6 fingerprint 확정과 분리). 세션 중단 대비 임시 동기화이며, 어디까지 갔는지 복구 가능하게 한다.
+
+```markdown
+## 하네스 (Backend) — 빌드 진행 중
+
+**스킬 (Phase 5 완료):**
+- order-field-sync
+- payment-webhook-scaffold
+
+(fingerprint는 Phase 6에서 확정)
+```
+
+스킬 0개면 이 섹션은 비워둔다.
+
+#### Step 6 — 0개 케이스 정상 종료
+
+사용자가 0개 선택했거나 후보가 0개였다면, `.claude/skills/` 디렉토리는 비어있는 상태로 Phase 6으로 진행한다. 빌드는 정상 완료. 코어 6 + 리더 2 + 조건부 전문가 에이전트는 이미 Phase 3-4에서 만들어졌으므로 하네스 자체는 작동한다.
+
+fingerprint의 `skills_generated` 필드는 빈 배열 `[]`로 기록.
+
+> ⚠️ **억지로 채우지 말 것**: "그래도 1개는 만들어야지"라는 본능을 차단한다. 사용자가 거부한 후보를 다시 만들거나, "내장 스킬"이라는 명목으로 자동 생성하지 않는다. 0은 0이다.
+
+### Phase 6: CLAUDE.md 하네스 컨텍스트 + Fingerprint 등록 (최종 확정)
+
+Phase 5 Step 5의 임시 동기화 섹션을 지우고, 최종 컨텍스트와 fingerprint 블록으로 교체한다. 이 블록은 tdd/implement 스킬이 파이프라인 실행 시 읽어서 재활용한다.
 
 ```markdown
 ## 하네스 (Backend)
@@ -207,6 +270,8 @@ skills_generated: {list}
 3. **차이 적용**: 차이가 있으면 사용자에게 설명하고 점진적으로 반영
 4. **Fingerprint 갱신**
 
+**스킬 게이트 idempotency**: 유지보수 모드에서는 Phase 5 게이트를 자동으로 다시 띄우지 않는다. 사용자가 "스킬 후보 다시 검토" 같은 명시 요청을 하지 않는 한, 기존 `skills_generated` 목록을 그대로 보존한다. 이전 빌드에서 0개 선택한 경우도 빈 배열을 유지 — "이번엔 만들어볼까"라고 자동 제안하지 않는다.
+
 ---
 
 ## 산출물 체크리스트
@@ -215,8 +280,9 @@ skills_generated: {list}
 - [ ] `{프로젝트}/.claude/agents/tdd-leader.md` 및 `team-leader.md` — Opus 고정, `<Project_Context>` 포함
 - [ ] `{프로젝트}/.claude/agents/` — 감지 결과에 매칭되는 조건부 전문가만 생성 (제네릭 "DDD 전문가" 금지)
 - [ ] 전문가 에이전트 프롬프트에 실제 파일 경로·모듈명·도메인 용어가 최소 3개 포함
-- [ ] `{프로젝트}/.claude/skills/` — 감지된 반복 패턴 기반 스킬 3-5개
-- [ ] `{프로젝트}/CLAUDE.md` — 하네스 컨텍스트 + `<!-- harness-fingerprint v1 -->` 블록
+- [ ] `{프로젝트}/.claude/skills/` — 사용자 게이트 통과한 후보만 (0개도 정상). 생성됐다면 이름이 프로젝트 모듈명/도메인 용어에서 유도됨 (`migration-check`/`api-workflow` 같은 제네릭 금지)
+- [ ] 생성된 스킬 본문에 실제 파일 경로·import 패턴·모듈명/도메인 용어 최소 3개 주입
+- [ ] `{프로젝트}/CLAUDE.md` — Phase 5 Step 5 임시 동기화 후 Phase 6에서 fingerprint 블록 최종 확정 (`skills_generated`는 빈 배열도 정상)
 - [ ] 재실행 시 fingerprint idempotency 검증
 
 ## 참고

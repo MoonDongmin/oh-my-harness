@@ -264,4 +264,142 @@ disallowedTools: Write, Edit
 4. 차이가 없으면: 에이전트 파일을 재작성하지 않고 "하네스가 이미 최신 상태입니다" 보고.
 5. 차이가 있으면: 차이를 사용자에게 요약해서 보여주고 확인 받은 뒤 재생성. 새 fingerprint로 블록 업데이트.
 
+스킬에 대해서도 동일: Phase 5 게이트를 다시 띄우지 않는다. 사용자가 새 후보를 추가하고 싶으면 "skills 추가" 같은 명시 요청을 해야 함.
+
 이 원칙으로 재실행이 안전하다.
+
+---
+
+## 8. 스킬 본문 주입 규칙
+
+Phase 5 게이트를 통과한 후보의 SKILL.md 본문을 작성할 때, Phase 1 감지 객체의 어떤 필드를 어떻게 박는지에 대한 규칙. 에이전트 주입과 동일한 철학: **실제 사실만 박고, 일반화·이론은 박지 않는다**.
+
+### 8-1. 어떤 필드를 본문 어디에 박는가
+
+| 본문 섹션 | 박을 필드 | 박는 방식 |
+|----------|---------|---------|
+| Description (frontmatter) | `domain_terms`, 후보 도출 시 정한 트리거 키워드 | 자연어 문장에 직접 인용. "src/modules/{모듈}/" 같은 실제 경로 1개 + 도메인 용어 2-3개 |
+| 프로젝트 컨텍스트 섹션 | `module_pattern`, `existing_modules`, `notable_files` | 디렉토리 트리 형식으로 기존 모듈 1개를 그대로 복사. 모듈 이름은 실제 모듈 중 하나(예: `user`, `order`)를 골라서 |
+| 워크플로우 Step | `data_layer`, `test_stack` 관련 명령어 | 해당 ORM/테스트 러너의 실제 명령어 (`bun prisma migrate dev`, `bun test order.spec.ts`) |
+| 네이밍 규칙 | Phase 1에서 추출한 케이스 컨벤션 | 실제 파일/클래스/변수 사례 1개씩 |
+| Import 규칙 | `notable_files`의 실제 import 첫 줄 3개 | tsconfig path alias가 있으면 alias 표기, 없으면 상대경로 표기 |
+| 주의사항 | `domain_terms` + 알려진 함정 | "이 프로젝트에서 {도메인 용어}는 {특정 의미}로 쓰임 — 혼동 주의" |
+
+### 8-2. 박지 말 것
+
+- 프레임워크 공식 문서 인용 (Claude가 이미 안다)
+- 일반 DDD/Clean/Hex 이론 (architect 에이전트가 처리)
+- "best practice" 류 일반론
+- 다른 프로젝트에서도 통하는 추상화
+
+### 8-3. Before / After 예시
+
+같은 후보 `order-field-sync` (사용자가 게이트에서 선택했다고 가정)를 두 가지 방식으로 작성한 비교.
+
+#### Before (컨텍스트 0주입 — Bad)
+
+```markdown
+---
+name: order-field-sync
+description: "주문 모듈에 새 필드를 추가할 때 관련 파일들을 동기화한다."
+---
+
+# Order Field Sync
+
+이 스킬은 주문 모듈에 필드를 추가할 때 사용한다.
+
+## 워크플로우
+
+1. 스키마에 필드를 추가한다.
+2. 마이그레이션을 생성한다.
+3. DTO를 업데이트한다.
+4. 컨트롤러에 반영한다.
+5. 테스트를 작성한다.
+```
+
+**문제점**:
+- description에 트리거 키워드 없음, 경계 조건 없음 → trigger 약함
+- 본문에 실제 파일 경로 0개 → Claude가 매번 디렉토리 탐색해야 함
+- "스키마", "DTO" 어느 ORM/패턴인지 명시 없음 → Claude가 추측해야 함
+- 다른 NestJS+Prisma 프로젝트에 복붙해도 통함 = 이 프로젝트 가치 0
+
+#### After (컨텍스트 3+ 주입 — Good)
+
+```markdown
+---
+name: order-field-sync
+description: "src/modules/order/에 새 필드를 추가할 때 prisma schema → migration → CreateOrderDto/UpdateOrderDto → OrderController → order.spec.ts 5곳을 동기화한다. '주문 필드 추가', '주문 마이그레이션', 'add order field', 'order schema change' 요청에 반드시 사용. 단순 조회/디버깅에는 트리거하지 말 것."
+---
+
+# Order Field Sync
+
+src/modules/order/에 새 필드 1개를 추가할 때 5곳을 누락 없이 동기화하기 위한 스킬. 기존 user 모듈과 invoice 모듈도 동일 패턴이지만, 이 스킬은 order 전용이다 (다른 모듈은 별도 스킬 없음 — 직접 처리).
+
+## 프로젝트 컨텍스트
+
+기존 order 모듈 구조 (실제):
+
+```
+src/modules/order/
+├── order.controller.ts        ← @Controller('orders'), CRUD 라우트
+├── order.service.ts           ← @Injectable, OrderRepository 주입
+├── order.repository.ts        ← Prisma 클라이언트 직접 사용
+├── order.module.ts            ← @Module providers/exports
+├── dto/
+│   ├── create-order.dto.ts    ← class-validator 데코레이터 사용
+│   └── update-order.dto.ts    ← PartialType(CreateOrderDto)
+└── order.spec.ts              ← jest, OrderService 단위 테스트
+
+prisma/schema.prisma            ← model Order { ... }
+prisma/migrations/{timestamp}_*/ ← 각 마이그레이션 디렉토리
+```
+
+기존 모듈 패턴 import 규칙 (관찰됨):
+- 내부: `import { OrderService } from './order.service'`
+- alias: `import { PrismaService } from '@modules/prisma/prisma.service'`
+- 외부: `import { Injectable } from '@nestjs/common'`
+
+## 워크플로우
+
+### Step 1 — Prisma schema에 필드 추가
+`prisma/schema.prisma`의 `model Order` 블록에 새 필드 추가. 타입은 prisma scalar (`String`, `Int`, `DateTime` 등). nullable 결정 시 기존 데이터 마이그레이션 영향 고려.
+
+### Step 2 — Migration 생성
+```bash
+bun prisma migrate dev --name add_order_{field_name}
+```
+이 명령은 prisma/migrations/ 하위에 SQL 파일을 자동 생성한다. `prisma db push`는 마이그레이션 파일을 만들지 않아 prod 추적 불가 — 사용 금지.
+
+### Step 3 — DTO 업데이트
+`src/modules/order/dto/create-order.dto.ts`와 `update-order.dto.ts`에 필드 추가. class-validator 데코레이터 필수 (`@IsString()`, `@IsNumber()` 등). UpdateOrderDto는 `PartialType(CreateOrderDto)`로 자동 상속되므로 별도 추가 불필요.
+
+### Step 4 — Controller 반영
+`src/modules/order/order.controller.ts`의 POST/PATCH 핸들러가 DTO를 받으므로 자동 반영. 단, 응답 매핑이나 별도 필터링이 필요하면 컨트롤러도 수정.
+
+### Step 5 — 테스트 추가
+`src/modules/order/order.spec.ts`에 새 필드를 포함한 mock 데이터 추가. 기존 `describe('OrderService')` 블록의 fixture 패턴 따름.
+
+## 주의사항
+
+- 이 프로젝트에서 "Order"는 **결제 완료 후 fulfillment 단위**다 (Cart != Order). 새 필드가 Cart 단계 정보면 Cart 모듈에 추가해야 함.
+- prisma migration 후 `bun prisma generate`를 잊지 말 것 — 잊으면 ts 컴파일 에러.
+- order.spec.ts는 OrderRepository를 mock하지 말 것 (이 프로젝트 컨벤션: 단위 테스트도 인메모리 prisma 사용).
+```
+
+**왜 Good인가**:
+- description: 5개 트리거 키워드 + 경계 조건 ("단순 조회 트리거 금지")
+- 실제 파일 경로 7개 박힘 (`src/modules/order/order.controller.ts` 등)
+- 실제 import 패턴 3개 박힘
+- 실제 명령어 (`bun prisma migrate dev --name ...`) + Why-First 설명 (`db push` 금지 이유)
+- 도메인 용어 차이 명시 ("Order vs Cart")
+- 다른 프로젝트에 복붙 불가 = 이 프로젝트 가치 max
+
+### 8-4. 주입 검증 체크리스트
+
+스킬 본문 작성 후 다음을 자가검증:
+
+- [ ] description에 실제 경로 1개 + 트리거 키워드 3개 이상
+- [ ] 본문에 실제 파일 경로 최소 3개
+- [ ] 본문에 실제 명령어 최소 1개 (프로젝트 build/test/migration tool 기반)
+- [ ] 본문에 도메인 용어 최소 2개 (이 프로젝트 어휘로)
+- [ ] "다른 프로젝트에 복붙해도 통하는가?" → 통하면 실패. 이 프로젝트만의 사실이 부족함
