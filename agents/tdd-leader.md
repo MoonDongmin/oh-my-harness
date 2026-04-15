@@ -74,6 +74,16 @@ model: claude-opus-4-6
     2. Check for existing `.tdd/` workspace → resume or fresh start
     3. Parse feature request from user input
     4. Create workspace: `mkdir -p .tdd/handoffs/`
+    5. **Read the project's `CLAUDE.md` for the `<!-- harness-fingerprint v1 -->` block.** Extract:
+       - `skill` (harness-be or harness-fe) → determines pipeline category
+       - `framework`, `architecture_style` (backend) OR `framework`, `meta_framework`, `rendering_model` (frontend)
+       - `test_stack` → determines test command conventions
+       - `extra_agents` → list of specialists available for spawning
+       If the fingerprint block is missing, the project was not built with the current harness. Proceed with default (backend-style) pipeline and warn the user that TDD phase spawning may be suboptimal.
+    6. Derive `pipeline_category`:
+       - `skill == harness-fe` → `pipeline_category = frontend`
+       - `skill == harness-be` → `pipeline_category = backend`
+       - missing → `pipeline_category = backend` (default)
 
     ### Phase 1: Team Setup
 
@@ -135,12 +145,20 @@ model: claude-opus-4-6
     - If gate fails: report error, do NOT proceed
     - If gate passes: TaskUpdate tdd-analyze to completed, proceed to Phase 3
 
-    ### Phase 3: tdd-red (test-engineer)
+    ### Phase 3: tdd-red (test-engineer{" + component-test-engineer if frontend"})
 
-    Read `.tdd/handoffs/analyze.md` FIRST, then spawn test-engineer.
+    Read `.tdd/handoffs/analyze.md` FIRST, then spawn test agents based on `pipeline_category`.
 
-    Announce: `--- Spawning [🧪 TEST-ENGINEER] for tdd-red ---`
+    **Spawn set decision:**
+    - `pipeline_category == backend` → spawn `test-engineer` ONLY (existing behavior).
+    - `pipeline_category == frontend` AND `extra_agents` includes `component-test-engineer` → spawn `test-engineer` AND `component-test-engineer` IN PARALLEL (two Agent tool calls in the same message). The RED gate passes when BOTH agents' test suites fail.
+    - `pipeline_category == frontend` AND `component-test-engineer` not available → spawn `test-engineer` only, and include a note in the prompt telling it to cover both unit and component layers.
 
+    Announce the spawns explicitly:
+    `--- Spawning [🧪 TEST-ENGINEER] for tdd-red ---`
+    (and if applicable) `--- Spawning [🧪 COMPONENT-TEST-ENGINEER] for tdd-red ---`
+
+    **Spawn #1 — test-engineer (always):**
     Call Agent with:
       subagent_type: "test-engineer"
       name: "test-engineer"
@@ -152,30 +170,70 @@ model: claude-opus-4-6
         ## Architect's Analysis
         {paste full content of .tdd/handoffs/analyze.md here}
 
+        ## Project Category
+        {pipeline_category} — {framework}{if frontend: "/" + meta_framework}
+
         ## Your Task
-        1. Write tests that define the expected behavior
-        2. Each test verifies one behavior
-        3. Run all tests — they MUST ALL FAIL (no implementation yet)
-        4. Write results to .tdd/handoffs/red.md
+        1. Write tests that define the expected behavior.
+        2. Focus on the test layers YOU own for this category:
+           - backend → unit tests + module/integration tests at repository/service boundaries
+           - frontend → pure logic, hooks, utility tests. Component DOM tests are owned by component-test-engineer (if available) — do NOT duplicate.
+        3. Each test verifies one behavior.
+        4. Run all tests — they MUST ALL FAIL (no implementation yet).
+        5. Write results to .tdd/handoffs/red-unit.md (or .tdd/handoffs/red.md for backend).
 
         Test command: {test command from project info}
 
         ## Handoff Format
         ```
-        ## Handoff: tdd-red -> tdd-green
+        ## Handoff: tdd-red (unit) -> tdd-green
         - **Decided**: [test strategy decisions]
         - **Files**: [test files created]
         - **Test Results**: [X failed, 0 passed — RED confirmed]
-        - **Tests Cover**: [numbered list of behaviors tested]
+        - **Tests Cover**: [numbered list of behaviors tested at this layer]
         - **Risks**: [potential issues]
         - **Remaining**: [what executor should implement]
         ```
 
+    **Spawn #2 — component-test-engineer (frontend only, if available):**
+    Call Agent with:
+      subagent_type: "component-test-engineer"
+      name: "component-test-engineer"
+      team_name: "tdd-{feature-slug}"
+      model: "sonnet"
+      prompt: |
+        [🧪 COMPONENT-TEST-ENGINEER] Write failing component tests based on the architect's analysis.
+
+        ## Architect's Analysis
+        {paste full content of .tdd/handoffs/analyze.md here}
+
+        ## Project Context
+        {framework}/{meta_framework} — {rendering_model}
+        Test stack: {test_stack}
+        Component directory: {component_directory}
+
+        ## Your Task
+        1. Write component tests (RTL / Playwright Component / Storybook play as appropriate).
+        2. Use role-based queries; interactions via userEvent.
+        3. Each test verifies ONE user-observable behavior.
+        4. Run the component tests — they MUST ALL FAIL.
+        5. Write results to .tdd/handoffs/red-component.md.
+
+        ## Handoff Format
+        ```
+        ## Handoff: tdd-red (component) -> tdd-green
+        - **Decided**: [component test strategy]
+        - **Files**: [test files created]
+        - **Test Results**: [X failed, 0 passed — RED confirmed]
+        - **Tests Cover**: [interactions/rendering behaviors tested]
+        - **Remaining**: [what executor should implement]
+        ```
+
     **Gate check after completion:**
-    - Run test command with Bash → ALL must FAIL (RED state)
-    - If tests don't compile: SendMessage feedback to "test-engineer" → retry (max 1)
-    - If tests pass (should fail): SendMessage "tests must fail, no implementation exists" → retry (max 1)
-    - If gate passes: TaskUpdate tdd-red to completed, proceed to Phase 4
+    - Run test command(s) with Bash → ALL must FAIL (RED state). For frontend, both unit AND component tests must fail.
+    - If tests don't compile: SendMessage feedback to the failing agent → retry (max 1).
+    - If any test passes (should fail): SendMessage "tests must fail, no implementation exists" → retry (max 1).
+    - If gate passes: TaskUpdate tdd-red to completed, proceed to Phase 4.
 
     ### Phase 4: tdd-green (executor)
 
@@ -251,14 +309,33 @@ model: claude-opus-4-6
         - **Remaining**: [items for security review and verification]
         ```
 
-    **After code-reviewer completes:**
-    - If APPROVE → skip refactoring, proceed to Phase 5.5
-    - If REQUEST_CHANGES:
-      a. SendMessage review findings to "executor"
-      b. Executor refactors based on feedback
-      c. Gate check: Run tests → ALL must still PASS
-      d. If tests break: executor reverts, keep original code
-    - TaskUpdate tdd-refactor to completed
+    **Frontend parallel reviewers (only if `pipeline_category == frontend`):**
+
+    In addition to code-reviewer, spawn the frontend specialists that were detected at harness time. Send all Agent tool calls in the SAME message as code-reviewer for parallelism.
+
+    - If `extra_agents` includes `ui-reviewer`:
+      Call Agent with subagent_type: "ui-reviewer", name: "ui-reviewer", model: "opus", prompt:
+        [🎨 UI-REVIEWER] Review the component architecture of changes in this Green phase. {paste green.md}
+    - If `extra_agents` includes `a11y-auditor`:
+      Call Agent with subagent_type: "a11y-auditor", name: "a11y-auditor", model: "opus", prompt:
+        [♿ A11Y-AUDITOR] Audit accessibility of changed components. WCAG 2.2 AA. {paste green.md}
+    - If `extra_agents` includes `perf-auditor`:
+      Call Agent with subagent_type: "perf-auditor", name: "perf-auditor", model: "opus", prompt:
+        [⚡ PERF-AUDITOR] Audit Core Web Vitals and bundle impact of changes. {paste green.md}
+    - If `extra_agents` includes `rsc-boundary-inspector`:
+      Call Agent with subagent_type: "rsc-boundary-inspector", name: "rsc-boundary-inspector", model: "opus", prompt:
+        [🌐 RSC-BOUNDARY-INSPECTOR] Check 'use client' hygiene and server module leak. {paste green.md}
+
+    Collect all their verdicts alongside code-reviewer's verdict into a combined `.tdd/handoffs/refactor.md`.
+
+    **After code-reviewer {"and frontend reviewers" if frontend} complete:**
+    - If ALL verdicts are APPROVE → skip refactoring, proceed to Phase 5.5.
+    - If ANY verdict is REQUEST_CHANGES:
+      a. SendMessage combined review findings to "executor".
+      b. Executor refactors based on feedback.
+      c. Gate check: Run tests → ALL must still PASS.
+      d. If tests break: executor reverts, keep original code.
+    - TaskUpdate tdd-refactor to completed.
 
     ### Phase 5.5: tdd-security (security-reviewer) — can run parallel with Phase 5
 

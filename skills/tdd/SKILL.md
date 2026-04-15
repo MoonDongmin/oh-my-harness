@@ -70,7 +70,27 @@ tdd-analyze → tdd-red → tdd-green → tdd-refactor → tdd-verify
 
 ### Phase 1: 프로젝트 정보 수집
 
-스킬이 tdd-leader를 스폰하기 전에 프로젝트 정보를 수집한다:
+스킬이 tdd-leader를 스폰하기 전에 프로젝트 정보를 수집한다.
+
+**1단계: Harness Fingerprint 우선 읽기**
+
+먼저 `CLAUDE.md`에서 `<!-- harness-fingerprint v1 -->` 블록을 찾아 Read한다. 블록이 존재하면 다음 필드를 추출한다:
+
+| 필드 | 추출 위치 |
+|------|----------|
+| `skill` | `skill: harness-be` or `skill: harness-fe` |
+| `framework` | `framework:` line |
+| `architecture_style` (backend) | `architecture_style:` line |
+| `meta_framework` / `rendering_model` (frontend) | 각 line |
+| `test_stack` | `test_stack:` line |
+| `build_tool` (frontend) | `build_tool:` line |
+| `extra_agents` | `extra_agents:` line (comma-separated) |
+
+이 정보는 tdd-leader가 스폰 결정(어떤 전문가를 RED phase에서 띄울지)에 필요하다.
+
+**2단계: Fingerprint 부재 시 감지 폴백**
+
+Fingerprint 블록이 없으면(구 하네스 또는 수작업 프로젝트), 아래 방법으로 최소 정보를 감지한다:
 
 | 정보 | 감지 방법 |
 |------|----------|
@@ -80,6 +100,8 @@ tdd-analyze → tdd-red → tdd-green → tdd-refactor → tdd-verify
 | 테스트 명령 | `package.json` scripts.test |
 | 기존 테스트 패턴 | `__tests__/`, `*.spec.ts`, `*.test.ts` glob |
 | 사용 가능한 에이전트 | `.claude/agents/` 디렉토리의 에이전트 목록 |
+
+이 경우 tdd-leader에게 "fingerprint missing, running backend-default pipeline"을 알리고, 사용자에게 `/oh-my-harness:harness-be` 또는 `/oh-my-harness:harness-fe`로 하네스를 업그레이드하라고 안내할 수 있다.
 
 ### Phase 2: tdd-leader 스폰
 
@@ -100,18 +122,36 @@ Agent 도구 호출 파라미터:
 ## 기능 요청
 {사용자의 기능 설명}
 
+## Harness Fingerprint (from CLAUDE.md)
+- Pipeline category: {frontend | backend} (derived from skill)
+- Skill: {harness-be | harness-fe | missing}
+- Framework: {framework}
+- Architecture style: {architecture_style}  # backend only
+- Meta-framework: {meta_framework}           # frontend only
+- Rendering model: {rendering_model}         # frontend only
+- Test stack: {test_stack}
+- Build tool: {build_tool}                   # frontend only
+- Extra agents available: {extra_agents joined}
+
 ## 프로젝트 정보
 - 작업 디렉토리: {cwd}
-- 기술 스택: {감지된 스택 정보}
-- 테스트 프레임워크: {감지된 테스트 프레임워크}
 - 빌드 명령: {감지된 빌드 명령}
 - 테스트 명령: {감지된 테스트 명령}
 
 ## 사용 가능한 에이전트
 {.claude/agents/ 에 있는 에이전트 목록과 각 에이전트의 model 정보}
 
-TDD 파이프라인 프로토콜에 따라 실행하세요.
-각 Phase에서 반드시 Agent 도구로 전문 에이전트를 개별 스폰하세요.
+## 파이프라인 지시
+TDD 파이프라인 프로토콜에 따라 실행하세요. 각 Phase에서 반드시 Agent 도구로 전문 에이전트를 개별 스폰하세요.
+
+**tdd-red Phase 스폰 집합 결정** (Pipeline category에 따라):
+- category=backend → test-engineer만 스폰
+- category=frontend AND extra_agents에 component-test-engineer 포함 → test-engineer + component-test-engineer 병렬 스폰
+- category=frontend AND component-test-engineer 없음 → test-engineer만 스폰하고 컴포넌트 레이어도 커버하라고 지시
+
+**tdd-refactor Phase 리뷰어 집합**:
+- category=frontend → code-reviewer와 함께 ui-reviewer/a11y-auditor/perf-auditor (및 rsc-boundary-inspector가 있으면) 병렬 스폰
+- category=backend → code-reviewer 단독
 ```
 
 ### Phase 3: 결과 수신 & 보고

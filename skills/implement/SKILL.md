@@ -89,7 +89,24 @@ work-analyze → work-plan → work-implement → work-review → work-security 
 
 ### Phase 1: 프로젝트 정보 수집
 
-스킬이 team-leader를 스폰하기 전에 프로젝트 정보를 수집한다:
+**1단계: Harness Fingerprint 우선 읽기**
+
+먼저 `CLAUDE.md`에서 `<!-- harness-fingerprint v1 -->` 블록을 찾아 Read한다. 블록에서 추출:
+
+| 필드 | 추출 위치 |
+|------|----------|
+| `skill` | `harness-be` 또는 `harness-fe` → `pipeline_category` 결정 |
+| `framework` | `framework:` |
+| `architecture_style` (backend) | `architecture_style:` |
+| `meta_framework` / `rendering_model` (frontend) | 각 line |
+| `test_stack`, `build_tool` | 각 line |
+| `extra_agents` | comma-separated list |
+
+이 값은 team-leader가 스폰 결정(프론트엔드 리뷰어 병렬 스폰, component-test-engineer 추가 등)에 사용한다.
+
+**2단계: Fingerprint 부재 시 폴백**
+
+Fingerprint가 없으면 아래 방법으로 감지:
 
 | 정보 | 감지 방법 |
 |------|----------|
@@ -100,7 +117,7 @@ work-analyze → work-plan → work-implement → work-review → work-security 
 | 기존 테스트 패턴 | `__tests__/`, `*.spec.ts`, `*.test.ts` glob |
 | 사용 가능한 에이전트 | `.claude/agents/` 디렉토리의 에이전트 목록 (커스텀 에이전트 포함) |
 
-**커스텀 에이전트 감지**: domain-expert, api-specialist, data-engineer, infra-reviewer, monorepo-coordinator 등 프로젝트별 에이전트가 있으면 목록에 포함하여 team-leader에게 전달한다.
+**커스텀 에이전트 감지**: domain-expert, api-specialist, data-engineer, infra-reviewer, monorepo-coordinator, ui-reviewer, a11y-auditor, perf-auditor, component-test-engineer, rsc-boundary-inspector 등 프로젝트별 에이전트가 있으면 목록에 포함하여 team-leader에게 전달한다.
 
 ### Phase 2: team-leader 스폰
 
@@ -121,10 +138,18 @@ Agent 도구 호출 파라미터:
 ## 작업 요청
 {사용자의 작업 설명}
 
+## Harness Fingerprint (from CLAUDE.md)
+- Pipeline category: {frontend | backend}
+- Skill: {harness-be | harness-fe | missing}
+- Framework: {framework}
+- Architecture style: {architecture_style}  # backend
+- Meta-framework / Rendering model: {meta_framework} / {rendering_model}  # frontend
+- Test stack: {test_stack}
+- Build tool: {build_tool}                    # frontend
+- Extra agents available: {extra_agents joined}
+
 ## 프로젝트 정보
 - 작업 디렉토리: {cwd}
-- 기술 스택: {감지된 스택 정보}
-- 테스트 프레임워크: {감지된 테스트 프레임워크}
 - 빌드 명령: {감지된 빌드 명령}
 - 테스트 명령: {감지된 테스트 명령}
 
@@ -134,9 +159,16 @@ Agent 도구 호출 파라미터:
 코어 에이전트: architect, test-engineer, executor, code-reviewer, security-reviewer, debugger
 커스텀 에이전트: {프로젝트별 에이전트 목록 (있다면)}
 
-팀 구현 파이프라인 프로토콜에 따라 실행하세요.
-각 Phase에서 반드시 Agent 도구로 전문 에이전트를 개별 스폰하세요.
-커스텀 에이전트가 작업에 관련되면 해당 에이전트도 활용하세요.
+## 파이프라인 지시
+팀 구현 파이프라인 프로토콜에 따라 실행하세요. 각 Phase에서 반드시 Agent 도구로 전문 에이전트를 개별 스폰하세요.
+
+**work-review Phase 분기:**
+- pipeline_category=frontend → code-reviewer와 함께 ui-reviewer/a11y-auditor/perf-auditor/rsc-boundary-inspector(있으면) 병렬 스폰
+- pipeline_category=backend → code-reviewer 단독, 단 domain-expert/api-specialist 등 커스텀 에이전트가 있으면 관련성 판단 후 추가 스폰
+
+**work-implement Phase 분기 (test strategy=before/during일 때):**
+- pipeline_category=frontend AND component-test-engineer 존재 → test-engineer + component-test-engineer 병렬 스폰
+- 그 외 → test-engineer 단독
 ```
 
 ### Phase 3: 결과 수신 & 보고

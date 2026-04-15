@@ -93,6 +93,16 @@ model: claude-opus-4-6
     3. Check for existing `.work/` workspace → resume or fresh start
     4. Parse work request from user input
     5. Create workspace: `mkdir -p .work/handoffs/`
+    6. **Read the project's `CLAUDE.md` for the `<!-- harness-fingerprint v1 -->` block.** Extract:
+       - `skill` (harness-be or harness-fe) → determines pipeline category
+       - `framework` / `meta_framework` / `rendering_model` / `architecture_style`
+       - `test_stack`, `build_tool`
+       - `extra_agents` → list of specialists available for spawning
+       If the block is missing, fall back to discovery via `.claude/agents/` (Step 2) and assume backend pipeline.
+    7. Derive `pipeline_category`:
+       - `skill == harness-fe` → `pipeline_category = frontend`
+       - `skill == harness-be` → `pipeline_category = backend`
+       - missing → `pipeline_category = backend` (default)
 
     ### Phase 1: Team Setup
 
@@ -263,10 +273,33 @@ model: claude-opus-4-6
 
         ## Your Task
         1. Write tests for the new/modified behavior per the plan's test strategy
-        2. If strategy is `before`: tests must FAIL initially, executor makes them pass
-        3. If strategy is `during`: coordinate with executor via SendMessage
-        4. Run tests and report results
-        5. Append results to .work/handoffs/implement.md under "Test Coverage" section
+        2. For frontend projects, focus on pure logic, hooks, utilities. Component/DOM tests are owned by component-test-engineer (if available).
+        3. If strategy is `before`: tests must FAIL initially, executor makes them pass
+        4. If strategy is `during`: coordinate with executor via SendMessage
+        5. Run tests and report results
+        6. Append results to .work/handoffs/implement.md under "Test Coverage" section
+
+    **Additionally, if `pipeline_category == frontend` AND `extra_agents` includes `component-test-engineer` AND test strategy is `before` or `during`:**
+
+    Announce: `--- Spawning [🧪 COMPONENT-TEST-ENGINEER] for work-implement (component tests) ---`
+
+    Call Agent with:
+      subagent_type: "component-test-engineer"
+      name: "component-test-engineer"
+      team_name: "work-{task-slug}"
+      model: "sonnet"
+      prompt: |
+        [🧪 COMPONENT-TEST-ENGINEER] Write component tests alongside the implementation.
+
+        ## Plan
+        {paste plan.md}
+
+        ## Your Task
+        1. Write RTL / Playwright Component / Storybook play tests for user-observable component behavior
+        2. Use role-based queries; userEvent for interactions
+        3. Coordinate with test-engineer to avoid duplicate coverage (unit vs component layers)
+        4. Run component tests and report results
+        5. Append results to .work/handoffs/implement.md under "Component Test Coverage" section
 
     **Gate check after completion:**
     - Run build command with Bash → must SUCCEED
@@ -308,10 +341,20 @@ model: claude-opus-4-6
         - **Remaining**: [items for security review]
         ```
 
-    **After code-reviewer completes:**
-    - If APPROVE → skip refactoring, proceed to Phase 5.5
-    - If REQUEST_CHANGES:
-      a. SendMessage review findings to "executor"
+    **If `pipeline_category == frontend`, also spawn frontend specialist reviewers IN PARALLEL (same message as code-reviewer):**
+
+    - If `extra_agents` includes `ui-reviewer`: spawn `ui-reviewer` with prompt including the implement.md content.
+    - If `extra_agents` includes `a11y-auditor`: spawn `a11y-auditor` to audit WCAG 2.2 AA on changed components.
+    - If `extra_agents` includes `perf-auditor`: spawn `perf-auditor` to audit Core Web Vitals / bundle impact.
+    - If `extra_agents` includes `rsc-boundary-inspector` AND `rendering_model` ∈ {ssr, rsc-app-router, hybrid, islands}: spawn it to check 'use client' hygiene and server module leaks.
+    - If `extra_agents` includes `state-architect` AND state-related files changed: spawn it to review store/selector changes.
+
+    Collect all verdicts into a combined `.work/handoffs/review.md`.
+
+    **After code-reviewer {"+ frontend specialists" if frontend} complete:**
+    - If ALL verdicts are APPROVE → skip refactoring, proceed to Phase 5.5
+    - If ANY verdict is REQUEST_CHANGES:
+      a. SendMessage combined review findings to "executor"
       b. Executor refactors based on feedback
       c. Gate check: Run tests → must still PASS
       d. If tests break: executor reverts, keep original code
