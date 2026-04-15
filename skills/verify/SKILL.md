@@ -1,12 +1,21 @@
 ---
 name: verify
-description: "변경사항이 실제로 동작하는지 검증. 'verify', '검증해줘', '확인해봐', '테스트 돌려봐' 요청 시 사용."
+description: "Verifies that changes actually work. Triggers: 'verify', '검증해줘', '확인해봐', '테스트 돌려봐'."
 allowed-tools: Read Glob Grep Bash
 ---
 
 # Verify
 
 Use this skill when the user wants confidence that a feature, fix, or refactor actually works.
+
+## Language Policy
+
+**All user-facing output must be in Korean.** This file is written in English for token efficiency (Claude reads it as instructions), but anything the end user sees — `AskUserQuestion` text, progress messages, final summaries, reports — must be rendered in natural Korean.
+
+- Claude-directed instructions in this file: English.
+- Embedded Korean strings marked `<!-- user-facing -->`: literal templates, never translate.
+- Frontmatter `description` Korean triggers: literal, never translate.
+- When you narrate progress to the user, translate to natural Korean first.
 
 ## Goal
 Turn vague "it should work" claims into concrete evidence.

@@ -1,13 +1,15 @@
 # Frontend Agents Catalog
 
-`harness-fe` Phase 4에서 생성하는 프론트엔드 전문가 에이전트 템플릿. 각 템플릿은 Phase 1 감지 결과의 필드로 치환할 `{placeholder}` 를 포함한다.
+> **Language note**: This reference is in English (Claude-read instructions). User-facing strings wrapped in `<!-- user-facing -->` fences are Korean templates — do not translate them.
 
-- **필수 4종**: ui-reviewer, a11y-auditor, perf-auditor, component-test-engineer
-- **조건부 5종**: storybook-guardian, state-architect, i18n-reviewer, design-system-guardian, rsc-boundary-inspector
+Frontend specialist agent templates that `harness-fe` Phase 4 generates. Each template contains `{placeholder}` tokens to be substituted with Phase 1 detection result fields.
+
+- **4 mandatory**: ui-reviewer, a11y-auditor, perf-auditor, component-test-engineer
+- **5 conditional**: storybook-guardian, state-architect, i18n-reviewer, design-system-guardian, rsc-boundary-inspector
 
 ---
 
-## 1. ui-reviewer (필수)
+## 1. ui-reviewer (mandatory)
 
 ```markdown
 ---
@@ -68,7 +70,7 @@ disallowedTools: Write, Edit
 
 ---
 
-## 2. a11y-auditor (필수)
+## 2. a11y-auditor (mandatory)
 
 ```markdown
 ---
@@ -130,7 +132,7 @@ disallowedTools: Write, Edit
 
 ---
 
-## 3. perf-auditor (조건부: build_tool ≠ unknown)
+## 3. perf-auditor (conditional: build_tool ≠ unknown)
 
 ```markdown
 ---
@@ -191,7 +193,7 @@ disallowedTools: Write, Edit
 
 ---
 
-## 4. component-test-engineer (조건부: test_stack에 RTL/Playwright/Storybook test-runner)
+## 4. component-test-engineer (conditional: test_stack includes RTL/Playwright/Storybook test-runner)
 
 ```markdown
 ---
@@ -213,7 +215,7 @@ model: claude-sonnet-4-6
 
     You work in parallel with `test-engineer`: they own pure logic, hooks, and utility tests. You own **component behavior** — DOM rendering, user interactions, accessibility queries, and interaction-level tests.
 
-    You delegate all test writing to Codex CLI: `Bash(codex exec --full-auto "구체적 component test 작성 지시")`.
+    You delegate all test writing to Codex CLI: `Bash(codex exec --full-auto "specific component test instructions")`.
   </Role>
 
   <Success_Criteria>
@@ -242,7 +244,7 @@ model: claude-sonnet-4-6
 
 ---
 
-## 5. storybook-guardian (조건부: has_storybook == true)
+## 5. storybook-guardian (conditional: has_storybook == true)
 
 ```markdown
 ---
@@ -283,7 +285,7 @@ disallowedTools: Write, Edit
 
 ---
 
-## 6. state-architect (조건부: state_mgmt in [redux, zustand, jotai, pinia, mobx] AND stores ≥ 3)
+## 6. state-architect (conditional: state_mgmt in [redux, zustand, jotai, pinia, mobx] AND stores ≥ 3)
 
 ```markdown
 ---
@@ -327,7 +329,7 @@ disallowedTools: Write, Edit
 
 ---
 
-## 7. i18n-reviewer (조건부: has_i18n == true)
+## 7. i18n-reviewer (conditional: has_i18n == true)
 
 ```markdown
 ---
@@ -369,7 +371,7 @@ disallowedTools: Write, Edit
 
 ---
 
-## 8. design-system-guardian (조건부: has_design_system == true OR packages/ui exists)
+## 8. design-system-guardian (conditional: has_design_system == true OR packages/ui exists)
 
 ```markdown
 ---
@@ -411,7 +413,7 @@ disallowedTools: Write, Edit
 
 ---
 
-## 9. rsc-boundary-inspector (조건부: rendering_model ∈ {ssr, rsc-app-router, hybrid, islands})
+## 9. rsc-boundary-inspector (conditional: rendering_model ∈ {ssr, rsc-app-router, hybrid, islands})
 
 ```markdown
 ---
@@ -457,20 +459,20 @@ disallowedTools: Write, Edit
 
 ## 10. Placeholder substitution
 
-각 템플릿의 `{placeholder}` 는 `harness-fe` Phase 4에서 다음과 같이 치환된다:
+Each template's `{placeholder}` tokens are substituted by `harness-fe` Phase 4 as follows:
 
-| placeholder | 값 source |
+| placeholder | Value source |
 |---|---|
-| `{framework}` | Phase 1 감지 필드 |
-| `{meta_framework}` | Phase 1 감지 필드 |
-| `{rendering_model}` | Phase 1 감지 필드 |
-| `{state_mgmt}` | Phase 1 감지 필드 |
-| `{styling}` | Phase 1 감지 필드 |
-| `{test_stack}` | Phase 1 감지 필드 (배열 조인) |
-| `{component_directory}` | Phase 1 감지 필드 |
-| `{component_naming_pattern}` | Phase 1 감지 필드 |
-| `{has_storybook}` / `{has_i18n}` / `{has_design_system}` | boolean → 문자열 |
-| `{test library}` | test_stack 기반 파생 — 예: `[rtl, vitest]` → `@testing-library/react + vitest` |
-| `{design system location}` | Phase 1의 `packages/ui/` 경로 또는 유사 |
+| `{framework}` | Phase 1 detection field |
+| `{meta_framework}` | Phase 1 detection field |
+| `{rendering_model}` | Phase 1 detection field |
+| `{state_mgmt}` | Phase 1 detection field |
+| `{styling}` | Phase 1 detection field |
+| `{test_stack}` | Phase 1 detection field (array joined) |
+| `{component_directory}` | Phase 1 detection field |
+| `{component_naming_pattern}` | Phase 1 detection field |
+| `{has_storybook}` / `{has_i18n}` / `{has_design_system}` | boolean → string |
+| `{test library}` | Derived from test_stack — e.g., `[rtl, vitest]` → `@testing-library/react + vitest` |
+| `{design system location}` | Phase 1's `packages/ui/` path or equivalent |
 
-조건부 섹션(`{if ... : "..."}`) 은 Phase 1 감지 값에 따라 포함 또는 제외된다.
+Conditional sections (`{if ... : "..."}`) are included or excluded based on Phase 1 detection values.

@@ -1,107 +1,114 @@
 # Skill Generation Guide
 
-> **이 문서는 `harness-be`/`harness-fe` Phase 5 Step 1의 필독 문서다.** 두 스킬 빌더는 Phase 5 진입 시 이 파일과 `skill-writing-guide.md`를 반드시 Read한 뒤 후보 도출 단계로 진행한다. 이 가이드 없이 후보를 추정하면 제네릭 일반명사가 나오고, 사용자가 안 쓰는 스킬이 생성된다.
+> **Language note**: This reference is in English (Claude-read instructions). User-facing strings wrapped in `<!-- user-facing -->` fences are Korean templates — do not translate them.
 
-프로젝트 분석 결과를 기반으로 **이 프로젝트에서 반복될 작업**을 후보로 도출하고, **사용자 승인을 거쳐** 선택된 것만 스킬로 번들링하는 가이드.
+> **This document is required reading for `harness-be`/`harness-fe` Phase 5 Step 1.** Both skill builders MUST Read this file and `skill-writing-guide.md` upon entering Phase 5 before proceeding to candidate derivation. Without this guide, candidates degenerate into generic nouns and the user never invokes the generated skill.
 
-> **핵심 원칙**: "NestJS면 X 스킬" 같은 프레임워크 매핑이 아니라, "이 프로젝트의 실제 모듈·도메인에서 반복되는 작업 패턴"을 후보로 만들고, **사용자가 OK한 것만** 생성한다. 0개 생성도 정상 흐름이다.
+A guide for deriving **work likely to repeat in this project** as candidates from project analysis results, then bundling only the **user-approved** ones into skills.
 
----
-
-## 목차
-
-1. [후보 도출 절차 (5단계 탐색)](#1-후보-도출-절차-5단계-탐색)
-2. [스킬 생성 판단 기준](#2-스킬-생성-판단-기준)
-3. [스킬 SKILL.md 작성 템플릿](#3-스킬-skillmd-작성-템플릿)
-4. [프로젝트 컨벤션 적응 방법](#4-프로젝트-컨벤션-적응-방법)
-5. [스킬-에이전트 연결](#5-스킬-에이전트-연결)
-6. [Good vs Bad 스킬 예시 + 네이밍 금지 목록](#6-good-vs-bad-스킬-예시--네이밍-금지-목록)
-7. [사용자 게이트 안내 (옵션 형식)](#7-사용자-게이트-안내-옵션-형식)
-8. [본문 작성 — Why-First 원칙](#8-본문-작성--why-first-원칙)
+> **Core principle**: Not framework mapping like "if NestJS, then skill X". Instead, build candidates from the "actual repeated work patterns in this project's modules and domains", and **only generate the ones the user OKs**. Generating 0 skills is a normal flow.
 
 ---
 
-## 1. 후보 도출 절차 (5단계 탐색)
+## Table of contents
 
-매트릭스 룩업 금지. 다음 5단계를 순서대로 수행한다.
+1. [Candidate derivation procedure (5-step exploration)](#1-candidate-derivation-procedure-5-step-exploration)
+2. [Skill creation criteria](#2-skill-creation-criteria)
+3. [SKILL.md authoring template](#3-skillmd-authoring-template)
+4. [Adapting to project conventions](#4-adapting-to-project-conventions)
+5. [Skill-agent linkage](#5-skill-agent-linkage)
+6. [Good vs Bad skill examples + naming blacklist](#6-good-vs-bad-skill-examples--naming-blacklist)
+7. [User gate prompt (option format)](#7-user-gate-prompt-option-format)
+8. [Body authoring — Why-First principle](#8-body-authoring--why-first-principle)
 
-### Step A — 디렉토리 관찰
+---
 
-Phase 1 감지 결과(`module_pattern`, `existing_modules`, `domain_terms`, `notable_files`, `infra`)와 함께 프로젝트 루트의 실제 디렉토리 트리를 한 번 더 본다. 어떤 이름의 디렉토리가 몇 개씩 반복되는지, 어떤 파일 패턴이 매 모듈마다 등장하는지 머릿속에 그린다.
+## 1. Candidate derivation procedure (5-step exploration)
 
-### Step B — 가설 (자유 서술)
+No matrix lookup. Run the 5 steps below in order.
 
-"이 프로젝트의 사람이 앞으로 한 달 안에 같은 일을 3번 이상 할 가능성이 있는 작업은?"을 자유롭게 5-8개 서술한다. 표가 아니라 문장이다. **이 시점에 스킬 이름을 짓지 않는다.** 작업 자체만 묘사:
+### Step A — Directory observation
 
+Together with Phase 1 detection results (`module_pattern`, `existing_modules`, `domain_terms`, `notable_files`, `infra`), look once more at the actual directory tree at the project root. Form a mental picture of which directory names repeat and how often, and which file patterns appear in every module.
+
+### Step B — Hypotheses (free-form)
+
+Free-write 5-8 answers to: "What work is a person on this project likely to do 3+ times in the next month?" Sentences, not tables. **Do not name skills at this point.** Describe only the work itself:
+
+<!-- user-facing (Korean, do not translate) -->
 ```
 - "주문 도메인에 새 필드를 추가할 때, prisma 스키마 → migration → DTO → 컨트롤러 4곳을 동기화"
 - "결제 웹훅을 새로 받을 때, controller/service/dto/test 4개 파일과 서명 검증 미들웨어를 항상 같은 순서로 추가"
 - "사용자 권한이 바뀔 때 guard·decorator·테스트 fixture 3곳을 바꾸는데 누락이 잦음"
 ```
+<!-- /user-facing -->
 
-### Step C — 검증
+### Step C — Verification
 
-각 가설이 정말로 이 프로젝트에 해당하는지 **실제 파일로 1-2개 확인**한다. 가설 1번이 "주문 도메인 4곳 동기화"라면, 실제로 `src/modules/order/` 안에 prisma·DTO·controller가 모두 있는지 직접 확인. 가설이 검증 안 되면 버린다.
+For each hypothesis, **confirm with 1-2 actual files** that it really applies to this project. If hypothesis #1 is "sync the 4 places in the order domain", check directly that `src/modules/order/` actually contains prisma, DTO, and controller. Drop hypotheses that fail verification.
 
-검증 통과한 가설만 살린다. 보통 5-8개 중 3-5개가 살아남는다.
+Keep only hypotheses that pass verification. Typically 3-5 of the 5-8 survive.
 
-### Step D — 후보 도출 (이름 짓기)
+### Step D — Candidate derivation (naming)
 
-살아남은 가설마다 스킬 이름과 한 줄 용도를 정한다. **이름은 반드시 프로젝트의 실제 모듈명·도메인 용어·디렉토리 이름에서 유도**한다. §6 네이밍 금지 목록을 먼저 읽고 위반하지 않는지 확인.
+For each surviving hypothesis, choose a skill name and a one-line purpose. **Names MUST be derived from this project's actual module names, domain terms, and directory names.** Read §6 (naming blacklist) first and check that you don't violate it.
 
+<!-- user-facing (Korean, do not translate) -->
 ```
 - "주문 도메인 4곳 동기화" → order-field-sync
   용도: src/modules/order/ 작업 시 prisma·DTO·controller·migration 4곳 자동 동기화
 - "결제 웹훅 추가" → payment-webhook-scaffold
   용도: 새 결제 웹훅 라우트 + 서명 검증 미들웨어 골격 생성
 ```
+<!-- /user-facing -->
 
-### Step E — 자체 필터링 (4개 상한 강제)
+### Step E — Self-filtering (enforce 4-candidate cap)
 
-§2 판단 기준으로 후보를 거른다. 그리고 **최대 4개로 줄인다**. 이유: Step F 사용자 게이트가 단일 `AskUserQuestion` 호출을 쓰는데, 옵션 4개 상한이 있다. 또한 4개 상한이 사용자 결정 피로를 줄인다.
+Filter candidates with the criteria in §2. Then **cut the list down to a maximum of 4**. Reason: the user gate in Step F uses a single `AskUserQuestion` call, which has a 4-option cap. The 4-cap also reduces user decision fatigue.
 
-5개 이상이 살아남았다면, **에이전트별 우선순위**로 자른다 — 코어 6 에이전트 중 어느 에이전트가 가장 자주 쓸 후보인지 따져 상위 4개만 남긴다.
-
----
-
-## 2. 스킬 생성 판단 기준
-
-모든 검증된 후보가 사용자 게이트로 가야 하는 건 아니다.
-
-### 후보로 올릴 만한 경우
-
-- 에이전트가 **3회 이상** 동일 패턴의 작업을 할 것으로 예상
-- 작업에 **프로젝트 고유의 규칙**이 있어 매번 설명하기 번거로움
-- 작업 절차가 **3단계 이상**이고 순서가 중요
-- 위반 시 회귀 가능성 (예: 4곳 동기화 누락)
-
-### 후보에서 제외할 경우
-
-- 에이전트가 이미 잘 아는 범용 작업 (Git 커밋, 파일 읽기, 단순 grep)
-- 1회성 작업 (마이그레이션 1번 하고 끝날 일)
-- 프로젝트 고유 규칙이 없는 단순 반복 — Claude가 그냥 알아서 잘 함
-- 너무 추상적이라 본문에 박을 실제 경로/도메인 용어가 1-2개 미만
-
-### 0개 후보도 정상
-
-판단 기준을 통과하는 후보가 0개면 후보를 0개로 가져간다. 게이트 단계에서 사용자에게 "이번 빌드에 자동 생성할 만한 반복 패턴을 못 찾았다"고 알리고 정상 종료. **억지로 채우지 않는다.**
-
-### 적정 스킬 수 (사용자 게이트 통과 후)
-
-| 프로젝트 규모 | 후보 수 | 사용자 선택 후 평균 |
-|-------------|---------|-------------------|
-| 소규모 (모듈 5 미만) | 0-2개 | 0-1개 |
-| 중규모 (모듈 5-15) | 2-4개 | 1-3개 |
-| 대규모 (모듈 15+) | 3-4개 | 2-4개 |
-
-**최대 후보 4개**, 사용자 선택 후 평균 1-3개가 정상 분포. 5개+ 생성이 일어났다면 Step E 필터링이 부족했던 것.
+If 5+ survive, cut by **per-agent priority** — among the core 6 agents, decide which agent would use each candidate most often, and keep the top 4.
 
 ---
 
-## 3. 스킬 SKILL.md 작성 템플릿
+## 2. Skill creation criteria
 
-게이트 통과 후 선택된 후보에 대해서만 작성.
+Not every verified candidate has to go to the user gate.
 
+### Cases worth raising as a candidate
+
+- The agent is expected to do the same pattern of work **3+ times**
+- The work has **project-specific rules** that are tedious to re-explain each time
+- The work has **3+ steps** and the order matters
+- Skipping it could cause regression (e.g. missing 1 of the 4 sync points)
+
+### Cases to exclude
+
+- Generic work the agent already knows well (git commits, file reads, plain grep)
+- One-off work (one migration that's done once)
+- Plain repetition with no project-specific rules — Claude handles it fine
+- Too abstract to anchor with even 1-2 real paths/domain terms in the body
+
+### 0 candidates is also normal
+
+If 0 candidates pass the criteria, take 0 candidates forward. At the gate step, tell the user "no repeating patterns found worth auto-generating in this build" and end normally. **Do not pad.**
+
+### Reasonable skill counts (after the user gate)
+
+| Project size | Candidate count | Avg after user picks |
+|--------------|-----------------|---------------------|
+| Small (<5 modules) | 0-2 | 0-1 |
+| Mid (5-15 modules) | 2-4 | 1-3 |
+| Large (15+ modules) | 3-4 | 2-4 |
+
+**Max 4 candidates**, average 1-3 after user selection — this is the normal distribution. If 5+ skills got generated, Step E filtering was insufficient.
+
+---
+
+## 3. SKILL.md authoring template
+
+Only authored for candidates that pass the gate.
+
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ---
 name: {project-derived-skill-name}
@@ -135,31 +142,37 @@ allowed-tools: {필요한 도구 목록}
 
 {이 프로젝트에서 흔히 발생하는 실수와 회피 방법}
 ```
+<!-- /user-facing -->
 
-### Description 작성 규칙
+### Description authoring rules
 
-description은 스킬의 **유일한 트리거 메커니즘**이다. 적극적(pushy)으로 작성한다.
+The description is the **only trigger mechanism** for the skill. Write it pushy.
 
-**나쁜 예 (제네릭):**
+**Bad (generic):**
+<!-- user-facing (Korean, do not translate) -->
 ```yaml
 description: "모듈을 생성하는 스킬"
 ```
+<!-- /user-facing -->
 
-**좋은 예 (도메인 유도 + pushy):**
+**Good (domain-derived + pushy):**
+<!-- user-facing (Korean, do not translate) -->
 ```yaml
 description: "src/modules/order/ 하위에 새 주문 관련 필드/엔드포인트를 추가할 때 prisma schema → migration → DTO → controller 4곳을 동기화한다. '주문 필드 추가', '주문 마이그레이션', 'order field' 같은 요청에 반드시 이 스킬을 사용. 단순 조회/디버깅에는 트리거하지 말 것."
 ```
+<!-- /user-facing -->
 
 ---
 
-## 4. 프로젝트 컨벤션 적응 방법
+## 4. Adapting to project conventions
 
-스킬 본문은 프로젝트의 **실제 컨벤션**을 반영해야 한다. 여기서 게이트 통과한 후보의 description에서 약속한 "주입될 컨텍스트"를 본문으로 펼친다.
+The skill body must reflect the project's **actual conventions**. This is where you expand the "context to be injected" promised in the gated candidate's description.
 
-### 디렉토리 구조 적응
+### Adapting directory structure
 
-기존 모듈 1개를 Read하여 실제 구조를 파악한 후 본문 "프로젝트 컨텍스트" 섹션에 그대로 복사:
+Read one existing module to capture the actual structure, then copy it verbatim into the body's "Project Context" section:
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ## 프로젝트 컨텍스트
 
@@ -175,11 +188,13 @@ src/modules/user/
 │   └── update-user.dto.ts
 └── user.spec.ts          ← 단위 테스트
 ```
+<!-- /user-facing -->
 
-### 네이밍 규칙 적응
+### Adapting naming conventions
 
-코드에서 관찰된 네이밍 패턴을 명시:
+State the naming patterns observed in the code:
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ## 네이밍 규칙
 - 파일명: kebab-case (`create-order.dto.ts`)
@@ -187,36 +202,40 @@ src/modules/user/
 - 변수/함수: camelCase (`findByUserId`)
 - 테이블/컬럼: snake_case (`user_id`)
 ```
+<!-- /user-facing -->
 
-### Import 패턴 적응
+### Adapting import patterns
 
-기존 파일의 import 구조를 분석:
+Analyze import structure of existing files:
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ## Import 규칙
 - 경로 alias: `@modules/user/user.service` (tsconfig paths 사용)
 - 내부 모듈: `import { UserService } from './user.service'`
 - 외부 모듈: `import { Injectable } from '@nestjs/common'`
 ```
+<!-- /user-facing -->
 
 ---
 
-## 5. 스킬-에이전트 연결
+## 5. Skill-agent linkage
 
-스킬은 "어떻게 하는가", 에이전트는 "누가 하는가". 1:1 또는 1:N.
+Skills are "how to do it"; agents are "who does it". 1:1 or 1:N.
 
-### 연결 방식
+### Linkage methods
 
-| 방식 | 구현 | 적합한 경우 |
-|------|------|-----------|
-| **프롬프트 내 인라인** | 에이전트 정의에 스킬 내용 직접 포함 | 스킬이 짧고(50줄 이하) 이 에이전트 전용 |
-| **Skill 도구 호출** | 에이전트 프롬프트에 "Skill 도구로 /skill-name 호출" 명시 | 스킬이 독립 워크플로우이고 여러 에이전트가 공유 |
-| **레퍼런스 로드** | `Read`로 스킬의 references/ 파일을 필요 시 로드 | 스킬 내용이 크고 조건부로만 필요 |
+| Method | Implementation | When suitable |
+|--------|----------------|---------------|
+| **Inline in prompt** | Embed the skill content directly in the agent definition | Skill is short (≤50 lines) and exclusive to this agent |
+| **Skill tool call** | The agent prompt states "use the Skill tool to call /skill-name" | Skill is an independent workflow shared by multiple agents |
+| **Reference load** | `Read` the skill's references/ files on demand | Skill is large and only conditionally needed |
 
-### CLAUDE.md에 바인딩 기록
+### Record bindings in CLAUDE.md
 
-하네스 빌드 Phase 6에서 CLAUDE.md에 에이전트-스킬 바인딩을 기록한다:
+In Phase 6 of the harness build, record agent-skill bindings in CLAUDE.md:
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 **스킬:**
 | 스킬 | 용도 | 사용 에이전트 |
@@ -224,61 +243,66 @@ src/modules/user/
 | order-field-sync | 주문 도메인 4곳 동기화 | executor |
 | payment-webhook-scaffold | 결제 웹훅 골격 생성 | executor |
 ```
+<!-- /user-facing -->
 
 ---
 
-## 6. Good vs Bad 스킬 예시 + 네이밍 금지 목록
+## 6. Good vs Bad skill examples + naming blacklist
 
-### 네이밍 금지 목록 (제네릭 일반명사)
+### Naming blacklist (generic nouns)
 
-다음 이름들은 **후보 단계에서 제외**한다. 어떤 프로젝트에서도 트리거가 약하고, 사용자가 안 쓴다.
+The names below **must be excluded at the candidate stage**. They have weak triggers in any project and the user never invokes them.
 
-| 금지 이름 | 이유 | 도메인 유도 대안 |
-|----------|------|------------------|
-| `migration-check` | 어떤 마이그레이션? 어떤 ORM? | `prisma-order-migration`, `typeorm-user-migration` |
-| `api-workflow` | 어떤 API? 무슨 워크플로우? | `payment-api-contract`, `notification-webhook-scaffold` |
-| `bundle-budget` | 어떤 번들? 어떤 예산? | `checkout-page-bundle-audit` |
-| `ui-workflow` | 무한 추상 | `product-card-design-sync` |
-| `a11y-check` | 어디의 a11y? | `checkout-form-a11y-audit` |
-| `test-scaffold` | 어떤 테스트 패턴? | `nest-controller-test-scaffold`, `rtl-component-test-gen` |
-| `domain-check` | 어떤 도메인? | `order-aggregate-invariant-check` |
-| `config-sync` | 어떤 config? | `env-prod-staging-diff` |
-| `pipeline-check` | 어떤 파이프라인? | `gha-deploy-impact-audit` |
+| Forbidden name | Why | Domain-derived alternative |
+|----------------|-----|----------------------------|
+| `migration-check` | Which migration? Which ORM? | `prisma-order-migration`, `typeorm-user-migration` |
+| `api-workflow` | Which API? Which workflow? | `payment-api-contract`, `notification-webhook-scaffold` |
+| `bundle-budget` | Which bundle? Which budget? | `checkout-page-bundle-audit` |
+| `ui-workflow` | Infinitely abstract | `product-card-design-sync` |
+| `a11y-check` | a11y where? | `checkout-form-a11y-audit` |
+| `test-scaffold` | Which test pattern? | `nest-controller-test-scaffold`, `rtl-component-test-gen` |
+| `domain-check` | Which domain? | `order-aggregate-invariant-check` |
+| `config-sync` | Which config? | `env-prod-staging-diff` |
+| `pipeline-check` | Which pipeline? | `gha-deploy-impact-audit` |
 
-**규칙**: 스킬 이름이 동일 분야의 다른 프로젝트에서도 그대로 통한다면, 그 이름은 너무 제네릭이다. 이름만 봐도 "이거 우리 프로젝트 거구나"가 와닿아야 함.
+**Rule**: If the skill name would work as-is for any other project in the same field, the name is too generic. The name alone should make a reader think "ah, that's ours".
 
-### Good 예시
+### Good example
 
+<!-- user-facing (Korean, do not translate) -->
 ```yaml
 name: order-field-sync
 description: "src/modules/order/에 새 필드를 추가할 때 prisma schema, migration, dto, controller 4곳을 동기화한다. '주문 필드 추가', 'add order field', '주문 마이그레이션' 요청에 반드시 사용."
 ```
+<!-- /user-facing -->
 
-본문에는:
-- `src/modules/order/` 실제 파일 구조 트리
-- 실제 import 패턴 (`@modules/order/order.service`)
-- 실제 네이밍 규칙 (kebab-case 파일, snake_case DB)
-- prisma schema 변경 후 `bun prisma migrate dev --name {feature}` 단계
+The body contains:
+- The actual file structure tree of `src/modules/order/`
+- The actual import pattern (`@modules/order/order.service`)
+- The actual naming convention (kebab-case files, snake_case DB)
+- A `bun prisma migrate dev --name {feature}` step after schema changes
 
-### Bad 예시
+### Bad example
 
+<!-- user-facing (Korean, do not translate) -->
 ```yaml
 name: nestjs-module-scaffold
 description: "NestJS 모듈을 생성하는 스킬"
 ```
+<!-- /user-facing -->
 
-본문에는:
-- NestJS 공식 문서의 일반적인 모듈 생성 가이드
-- `nest g module` 명령어 안내
-- 프로젝트의 실제 구조와 무관한 범용 템플릿
+The body contains:
+- A generic NestJS module guide from official docs
+- `nest g module` command guidance
+- A generic template unrelated to the project's actual structure
 
-**왜 Bad인가**:
-- 이름이 프레임워크 이름 + 일반명사 → 어떤 NestJS 프로젝트에나 적용 가능 → Claude가 이미 아는 것
-- 본문에 실제 파일 경로·도메인 용어가 없음 → 주입할 컨텍스트가 없으니 트리거 후에도 가치 없음
+**Why it's Bad**:
+- Name is "framework name + generic noun" → applies to any NestJS project → Claude already knows this
+- Body has no actual file paths or domain terms → no context to inject, so triggering it adds zero value
 
-### 정전 예시 인용 (참조 harness)
+### Reference example (companion harness)
 
-`/Users/dongmin/Developments/claude/harness/skills/harness/references/team-examples.md:98-105`의 SF 소설 팀 스킬 네이밍:
+`/Users/dongmin/Developments/claude/harness/skills/harness/references/team-examples.md:98-105` shows the SF novel team's skill names:
 
 ```
 worldbuilder        → world-setting
@@ -288,22 +312,23 @@ prose-stylist       → write-scene, review-chapter
 science-consultant  → science-check
 ```
 
-스킬 이름이 모두 **그 팀의 도메인 명사**다. `novel-worldbuilding-skill` 같은 제네릭이 없다. 우리도 같은 컨벤션을 따른다 — 백엔드면 모듈명·도메인 용어, 프론트면 컴포넌트명·라우트명에서 직접 유도.
+Every skill name is a **noun from that team's domain**. None of them look like `novel-worldbuilding-skill`. Follow the same convention — backend → derive from module names and domain terms; frontend → derive from component names and route names.
 
 ---
 
-## 7. 사용자 게이트 안내 (옵션 형식)
+## 7. User gate prompt (option format)
 
-Step F에서 후보를 사용자에게 제시할 때, 각 옵션 description은 다음 3요소를 **모두** 포함해야 한다. 빠지면 사용자가 판단 못 함.
+When presenting candidates to the user in Step F, each option's description must contain **all three** of the following. Missing any of them prevents the user from making a decision.
 
-### 필수 3요소
+### Required 3 elements
 
-1. **감지 증거** — 왜 이 후보를 만들 만하다고 봤는지 (어떤 디렉토리·파일·반복 패턴을 봤는지)
-2. **트리거 키워드** — 사용자가 어떤 말을 했을 때 이 스킬이 호출될지, 2-3개
-3. **주입될 컨텍스트** — 본문에 들어갈 실제 모듈명/경로 1-2개
+1. **Detection evidence** — why you thought this was worth proposing (which directories/files/repeated patterns you saw)
+2. **Trigger keywords** — 2-3 phrases the user might say that should invoke this skill
+3. **Context to be injected** — 1-2 actual module names/paths that will go into the body
 
-### 형식 예시
+### Format example
 
+<!-- user-facing (Korean, do not translate) -->
 ```
 label: order-field-sync
 description: "src/modules/order/ 작업 시 prisma·migration·dto·controller 4곳 동기화.
@@ -311,32 +336,36 @@ description: "src/modules/order/ 작업 시 prisma·migration·dto·controller 4
               트리거: '주문 필드 추가', '주문 마이그레이션', 'order schema'.
               주입 컨텍스트: src/modules/order/, prisma/schema.prisma."
 ```
+<!-- /user-facing -->
 
-### AskUserQuestion 호출 형식
+### AskUserQuestion call format
 
+<!-- user-facing (Korean, do not translate) -->
 ```
 question: "이 프로젝트에서 자동 생성할 보조 스킬을 선택해줘. 0개 선택도 OK."
 header: "스킬 후보"
 multiSelect: true
 options: [최대 4개]
 ```
+<!-- /user-facing -->
 
-후보가 0개면 게이트를 건너뛰고 "이번 빌드에 자동 생성할 만한 반복 패턴 없음"을 사용자에게 알린 뒤 Phase 6으로 직진.
+If candidates are 0, skip the gate, tell the user "no repeating patterns found worth auto-generating in this build", and proceed straight to Phase 6.
 
 ---
 
-## 8. 본문 작성 — Why-First 원칙
+## 8. Body authoring — Why-First principle
 
-> 출처: `/Users/dongmin/Developments/claude/harness/skills/harness/references/skill-writing-guide.md:57-88` (참조 harness)
+> Source: `/Users/dongmin/Developments/claude/harness/skills/harness/references/skill-writing-guide.md:57-88` (companion harness)
 
-LLM은 이유를 이해하면 엣지 케이스에서도 올바르게 판단한다. 강압적 규칙보다 맥락 전달이 효과적.
+LLMs make correct edge-case judgments when they understand the why. Conveying context beats coercive rules.
 
-**나쁜 예 (강압적):**
+**Bad (coercive):**
 ```markdown
 ALWAYS use prisma migrate dev. NEVER use prisma db push.
 ```
 
-**좋은 예 (Why-First):**
+**Good (Why-First):**
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 스키마 변경 후에는 `bun prisma migrate dev --name {feature}`를 사용한다.
 `prisma db push`는 마이그레이션 파일을 만들지 않아 prod 환경에서
@@ -344,62 +373,67 @@ ALWAYS use prisma migrate dev. NEVER use prisma db push.
 `db push`를 써도 되지만, 결과를 commit하기 전 반드시 `migrate dev`로
 변환한다.
 ```
+<!-- /user-facing -->
 
-### 일반화 원칙
+### Generalization principle
 
-특정 예시에만 맞는 좁은 규칙 대신 **원리 수준**으로 일반화.
+Generalize to **principle level** instead of writing narrow rules that only fit a specific example.
 
-**오버피팅:**
+**Overfit:**
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 "order_amount" 컬럼이 추가되면 dto에 amount: number를 추가하라.
 ```
+<!-- /user-facing -->
 
-**일반화:**
+**Generalized:**
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 prisma 모델에 새 컬럼이 추가되면 같은 이름·타입을 dto/{create,update}-{module}.dto.ts에 매핑한다. 컬럼 타입 → ts 타입 매핑 표는 prisma docs를 따른다.
 ```
+<!-- /user-facing -->
 
-### 명령형 어조
+### Imperative tone
 
-"~합니다"/"~할 수 있습니다" 대신 "~한다"/"~하라". 스킬은 지시서이므로 명확한 명령형이 효과적.
+Use "~한다"/"~하라" instead of "~합니다"/"~할 수 있습니다". A skill is a directive — clear imperative is more effective.
 
-### 컨텍스트 절약
+### Save context
 
-모든 문장이 토큰 비용을 정당화하는지 자문:
-- "Claude가 이미 알고 있는 내용인가?" → 삭제
-- "이 설명이 없으면 Claude가 실수하는가?" → 유지
-- "구체적 예시 1개가 긴 설명보다 효과적인가?" → 예시로 대체
+Ask if every sentence justifies its token cost:
+- "Does Claude already know this?" → delete
+- "Without this, would Claude make a mistake?" → keep
+- "Is one concrete example more effective than a long explanation?" → replace with the example
 
-상세 작성 패턴은 자매 문서 `skill-writing-guide.md`를 참고.
+For detailed authoring patterns, see the sibling document `skill-writing-guide.md`.
 
 ---
 
-## 부록 — 후보 도출 시드 카탈로그 (영감용, 매트릭스 아님)
+## Appendix — Candidate seed catalog (for inspiration, not a matrix)
 
-> ⚠️ **경고**: 아래는 "이런 패턴이 자주 보인다"는 예시일 뿐, 후보 리스트가 아니다. Step A-B에서 직접 발견한 패턴이 우선이며, 시드 없이 후보를 만들어도 OK. 시드 이름을 그대로 후보에 올리는 건 §6 네이밍 금지 위반이다.
+> ⚠️ **Warning**: The lists below are examples of "patterns we often see", not a candidate list. Patterns you discover yourself in Step A-B take priority, and it's fine to derive candidates without any seed. Putting the seed name straight into a candidate violates §6 naming rules.
 
-### 백엔드 시드
+### Backend seeds
 
-| 관찰된 패턴 | 후보 작업 | 도메인 유도 이름 예시 |
-|------------|----------|---------------------|
-| 같은 모듈 구조 3+ 반복 | 새 모듈 스캐폴딩 | `{도메인}-module-scaffold` |
-| 마이그레이션 디렉토리 + ORM | 스키마 변경 → 동기화 | `{ORM}-{도메인}-migration` |
-| 라우터 5+ 파일 | API 계약 변경 검증 | `{서비스}-api-contract` |
-| 모노레포 워크스페이스 | 크로스 패키지 영향도 | `{워크스페이스}-impact` |
-| 일관된 테스트 파일 패턴 | 테스트 골격 생성 | `{프레임워크}-{레이어}-test-gen` |
-| 환경별 .env 3+ | 환경 설정 diff | `env-{stage1}-{stage2}-diff` |
-| `.github/workflows/` 존재 | CI 영향도 사전 검사 | `gha-{워크플로우명}-impact` |
-| Hexagonal/Clean + 도메인 5+ | 도메인 불변 검증 | `{aggregate}-invariant-check` |
+| Observed pattern | Candidate work | Domain-derived name example |
+|------------------|----------------|-----------------------------|
+| Same module structure 3+ times | New module scaffold | `{domain}-module-scaffold` |
+| Migration directory + ORM | Schema change → sync | `{ORM}-{domain}-migration` |
+| 5+ router files | API contract change check | `{service}-api-contract` |
+| Monorepo workspace | Cross-package impact | `{workspace}-impact` |
+| Consistent test file pattern | Test skeleton generation | `{framework}-{layer}-test-gen` |
+| 3+ env files | Env diff | `env-{stage1}-{stage2}-diff` |
+| `.github/workflows/` present | CI impact precheck | `gha-{workflow}-impact` |
+| Hexagonal/Clean + 5+ domains | Domain invariant check | `{aggregate}-invariant-check` |
 
-### 프론트엔드 시드
+### Frontend seeds
 
-| 관찰된 패턴 | 후보 작업 | 도메인 유도 이름 예시 |
-|------------|----------|---------------------|
-| 컴포넌트 디렉토리 패턴 반복 | 새 컴포넌트 스캐폴딩 | `{컴포넌트유형}-scaffold` |
-| Storybook 존재 | 스토리 동기화 | `{컴포넌트}-story-sync` |
-| Playwright 존재 | 시각 회귀 테스트 | `{페이지}-visual-regression` |
-| 폼 컴포넌트 다수 | 폼 a11y 감사 | `{폼이름}-a11y-audit` |
-| 디자인 토큰 시스템 | 토큰 동기화 검증 | `{토큰패키지}-token-sync` |
-| i18n 라이브러리 + locale 다수 | 번역 누락 검증 | `{locale}-translation-check` |
+| Observed pattern | Candidate work | Domain-derived name example |
+|------------------|----------------|-----------------------------|
+| Repeated component directory pattern | New component scaffold | `{component-type}-scaffold` |
+| Storybook present | Story sync | `{component}-story-sync` |
+| Playwright present | Visual regression test | `{page}-visual-regression` |
+| Many form components | Form a11y audit | `{form-name}-a11y-audit` |
+| Design token system | Token sync verification | `{token-package}-token-sync` |
+| i18n library + many locales | Translation gap check | `{locale}-translation-check` |
 
-> 다시 강조: 위 표의 "이름 예시" 컬럼의 `{...}` 자리는 반드시 **이 프로젝트의 실제 용어**로 채운다. `{도메인}`을 그대로 두거나 `domain`으로 채우면 §6 위반이다.
+> Reiterating: the `{...}` placeholders in the "name example" column above MUST be filled with **this project's actual terms**. Leaving `{도메인}` literal or filling it with `domain` violates §6.

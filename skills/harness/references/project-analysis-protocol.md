@@ -1,135 +1,137 @@
 # Project Analysis Protocol
 
-프로젝트 코드베이스를 **아키텍처 비의존적으로** 탐색하여, 추가 에이전트와 스킬의 필요성을 판단하는 프로토콜.
+> **Language note**: This reference is in English (Claude-read instructions). User-facing strings wrapped in `<!-- user-facing -->` fences are Korean templates — do not translate them.
 
-> **원칙**: DDD, Hexagonal, MVC 등 특정 아키텍처를 가정하지 않는다. 코드가 보여주는 사실만으로 판단한다.
+A protocol for exploring the codebase **architecture-agnostically** to decide whether additional agents and skills are needed.
 
----
-
-## 목차
-
-1. [탐색 순서](#1-탐색-순서)
-2. [영역별 탐색 방법](#2-영역별-탐색-방법)
-3. [패턴 감지 기법](#3-패턴-감지-기법)
-4. [에이전트 필요성 판단 트리](#4-에이전트-필요성-판단-트리)
-5. [에이전트 프롬프트에 프로젝트 지식 주입](#5-에이전트-프롬프트에-프로젝트-지식-주입)
-6. [Good vs Bad 에이전트 예시](#6-good-vs-bad-에이전트-예시)
+> **Principle**: Do not assume any specific architecture (DDD, Hexagonal, MVC, etc.). Decide only from facts the code reveals.
 
 ---
 
-## 1. 탐색 순서
+## Table of contents
 
-아래 순서대로 탐색한다. 앞 단계의 결과가 뒷 단계의 탐색 범위를 좁혀준다.
+1. [Exploration order](#1-exploration-order)
+2. [Per-area exploration methods](#2-per-area-exploration-methods)
+3. [Pattern detection techniques](#3-pattern-detection-techniques)
+4. [Decision tree for agent necessity](#4-decision-tree-for-agent-necessity)
+5. [Injecting project knowledge into agent prompts](#5-injecting-project-knowledge-into-agent-prompts)
+6. [Good vs Bad agent examples](#6-good-vs-bad-agent-examples)
+
+---
+
+## 1. Exploration order
+
+Explore in the following order. Each step's results narrow the search space for the next.
 
 ```
-Step 1: 프로젝트 구조 (뼈대 파악)
-Step 2: 핵심 의존성 (기술 스택 파악)
-Step 3: 소스 코드 샘플링 (코딩 패턴 파악)
-Step 4: 테스트 현황 (품질 수준 파악)
-Step 5: 인프라/배포 (운영 환경 파악)
-Step 6: 종합 판단 (에이전트/스킬 필요성 결정)
+Step 1: Project structure (skeleton)
+Step 2: Core dependencies (tech stack)
+Step 3: Source code sampling (coding patterns)
+Step 4: Test status (quality level)
+Step 5: Infrastructure / deployment (operational environment)
+Step 6: Synthesis (decide on agent / skill needs)
 ```
 
 ---
 
-## 2. 영역별 탐색 방법
+## 2. Per-area exploration methods
 
-### Step 1: 프로젝트 구조
+### Step 1: Project structure
 
-**도구**: `Bash(ls -R)` depth 3 + `Glob(**/*.{ts,js,py,go,rs,java,kt,swift,rb})`
+**Tools**: `Bash(ls -R)` depth 3 + `Glob(**/*.{ts,js,py,go,rs,java,kt,swift,rb})`
 
-**파악하는 것:**
-- 소스 코드의 주요 언어
-- 최상위 디렉토리 구조 (src/, lib/, app/, packages/, apps/)
-- 모듈 경계 (같은 depth에서 반복되는 디렉토리 패턴)
-- 레이어 구분 (있다면 — controller/, service/, repository/ 등)
+**What to capture:**
+- Primary source language
+- Top-level directory layout (src/, lib/, app/, packages/, apps/)
+- Module boundaries (directory patterns repeated at the same depth)
+- Layer separation (if any — controller/, service/, repository/, etc.)
 
-**판단 포인트:**
-- `packages/` 또는 `apps/` + workspace 설정 → 모노레포
-- 같은 구조가 3개 이상 반복 → "반복 모듈 패턴" (상세: 3. 패턴 감지 기법)
-- 소스 파일 100개+ → 대규모 프로젝트
+**Decision points:**
+- `packages/` or `apps/` + workspace config → monorepo
+- Same structure repeating 3+ times → "repeated module pattern" (details: §3 Pattern detection techniques)
+- 100+ source files → large project
 
-### Step 2: 핵심 의존성
+### Step 2: Core dependencies
 
-**도구**: `Read(package.json)` / `Read(go.mod)` / `Read(requirements.txt)` / `Read(Cargo.toml)` / `Read(build.gradle)`
+**Tools**: `Read(package.json)` / `Read(go.mod)` / `Read(requirements.txt)` / `Read(Cargo.toml)` / `Read(build.gradle)`
 
-**파악하는 것:**
-- 프레임워크 (NestJS, Express, FastAPI, Spring, Rails, Next.js, etc.)
-- 데이터베이스 (TypeORM, Prisma, Drizzle, SQLAlchemy, GORM, etc.)
-- 메시지 큐 (Bull, RabbitMQ, Kafka, etc.)
-- 외부 API SDK (AWS SDK, Stripe, etc.)
-- 테스트 프레임워크 (Jest, Vitest, pytest, etc.)
+**What to capture:**
+- Frameworks (NestJS, Express, FastAPI, Spring, Rails, Next.js, etc.)
+- Database (TypeORM, Prisma, Drizzle, SQLAlchemy, GORM, etc.)
+- Message queues (Bull, RabbitMQ, Kafka, etc.)
+- External API SDKs (AWS SDK, Stripe, etc.)
+- Test frameworks (Jest, Vitest, pytest, etc.)
 
-**판단 포인트:**
-- DB 관련 의존성 + `migrations/` 디렉토리 → migration 스킬 후보
-- 다수의 외부 서비스 SDK → infra-specialist 에이전트 후보
-- 모노레포 도구 (lerna, nx, turbo, pnpm workspace) → cross-package-coordinator 후보
+**Decision points:**
+- DB-related dependencies + `migrations/` directory → migration skill candidate
+- Multiple external service SDKs → infra-specialist agent candidate
+- Monorepo tooling (lerna, nx, turbo, pnpm workspace) → cross-package-coordinator candidate
 
-### Step 3: 소스 코드 샘플링
+### Step 3: Source code sampling
 
-**도구**: `Read` — 가장 큰 모듈(파일 수 기준)의 대표 파일 3-5개
+**Tool**: `Read` — 3-5 representative files from the largest module (by file count)
 
-**선택 기준:**
-1. 모듈의 "진입점" 파일 (index, module, main)
-2. 가장 큰 파일 (보통 핵심 비즈니스 로직)
-3. 가장 많이 import되는 파일 (`Grep`으로 import 횟수 확인)
+**Selection criteria:**
+1. The module's "entry point" file (index, module, main)
+2. The largest file (usually core business logic)
+3. The most-imported file (use `Grep` to count import occurrences)
 
-**파악하는 것:**
-- 코딩 패턴 (클래스 vs 함수, OOP vs FP)
-- 네이밍 규칙 (camelCase, snake_case, PascalCase)
-- 모듈 간 관계 (import 패턴)
-- 비즈니스 로직 복잡도 (조건 분기, 상태 머신, 유효성 검증)
-- 반복되는 보일러플레이트 코드
+**What to capture:**
+- Coding patterns (class vs function, OOP vs FP)
+- Naming conventions (camelCase, snake_case, PascalCase)
+- Inter-module relationships (import patterns)
+- Business logic complexity (branching, state machines, validation)
+- Repeated boilerplate code
 
-**판단 포인트:**
-- 복잡한 비즈니스 로직 파일이 3개+ → domain-specialist 에이전트 후보
-- 동일한 보일러플레이트가 여러 모듈에서 반복 → scaffold 스킬 후보
-- 특정 도메인 용어가 반복 → 에이전트 프롬프트에 도메인 용어 포함
+**Decision points:**
+- 3+ files with complex business logic → domain-specialist agent candidate
+- The same boilerplate repeated across multiple modules → scaffold skill candidate
+- A specific domain term appearing repeatedly → include the domain term in the agent prompt
 
-### Step 4: 테스트 현황
+### Step 4: Test status
 
-**도구**: `Glob(**/*.{spec,test}.*)`으로 테스트 파일 목록 + `Read`로 테스트 설정
+**Tools**: `Glob(**/*.{spec,test}.*)` for test file listing + `Read` for test config
 
-**파악하는 것:**
-- 테스트 파일 수 vs 소스 파일 수 (비율)
-- 테스트 프레임워크와 러너
-- 테스트 패턴 (단위/통합/E2E 비율)
-- 테스트 디렉토리 구조 (__tests__/, *.spec.ts, test/)
+**What to capture:**
+- Test file count vs source file count (ratio)
+- Test framework and runner
+- Test patterns (unit / integration / E2E ratio)
+- Test directory layout (__tests__/, *.spec.ts, test/)
 
-**판단 포인트:**
-- test:source 비율 < 0.3 → qa-agent 추가 권장
-- 일관된 테스트 패턴 존재 → test-scaffold 스킬 후보
-- E2E 테스트 존재 → 검증 강화 에이전트 고려
+**Decision points:**
+- test:source ratio < 0.3 → recommend adding qa-agent
+- Consistent test pattern present → test-scaffold skill candidate
+- E2E tests present → consider a verification-strengthening agent
 
-### Step 5: 인프라/배포
+### Step 5: Infrastructure / deployment
 
-**도구**: `Glob({Dockerfile*,docker-compose*,.github/**,Makefile,*.yml,.gitlab-ci*,Jenkinsfile})`
+**Tools**: `Glob({Dockerfile*,docker-compose*,.github/**,Makefile,*.yml,.gitlab-ci*,Jenkinsfile})`
 
-**파악하는 것:**
-- CI/CD 파이프라인 유무와 종류
-- 컨테이너 설정
-- 배포 대상 (cloud, on-premise)
-- 환경 설정 파일 수와 다양성
+**What to capture:**
+- CI/CD pipeline presence and type
+- Container configuration
+- Deployment targets (cloud, on-premise)
+- Number and variety of environment config files
 
-**판단 포인트:**
-- CI/CD 파이프라인 존재 → pipeline-guardian 에이전트 후보 + pipeline-check 스킬 후보
-- Docker + docker-compose → infra-ops 에이전트 후보
-- 환경 설정 파일 3개+ (.env.development, .env.staging, .env.production) → config-sync 스킬 후보
+**Decision points:**
+- CI/CD pipeline present → pipeline-guardian agent candidate + pipeline-check skill candidate
+- Docker + docker-compose → infra-ops agent candidate
+- 3+ env config files (.env.development, .env.staging, .env.production) → config-sync skill candidate
 
 ---
 
-## 3. 패턴 감지 기법
+## 3. Pattern detection techniques
 
-### "반복 모듈" 감지
+### Detecting "repeated modules"
 
-프로젝트에서 **같은 구조가 반복되는 디렉토리**를 찾는다. 이것이 scaffold 에이전트/스킬의 핵심 근거.
+Look for **directories with the same structure repeated** in the project. This is the core evidence for scaffold agents/skills.
 
-**방법:**
-1. depth 2-3의 디렉토리를 나열
-2. 각 디렉토리 내 파일 목록을 비교
-3. 같은 파일명 패턴(확장자 제외)이 3개 이상 디렉토리에서 반복되면 → "반복 모듈"
+**How:**
+1. List directories at depth 2-3
+2. Compare the file lists inside each
+3. If the same filename pattern (excluding extension) repeats across 3+ directories → "repeated module"
 
-**예시:**
+**Example:**
 ```
 src/
 ├── user/
@@ -149,90 +151,91 @@ src/
     └── payment.module.ts
 ```
 
-→ `{name}.controller.ts`, `{name}.service.ts`, `{name}.repository.ts`, `{name}.module.ts` 패턴이 3회 반복 → scaffold 스킬 생성 대상.
+→ The pattern `{name}.controller.ts`, `{name}.service.ts`, `{name}.repository.ts`, `{name}.module.ts` repeats 3 times → target for a scaffold skill.
 
-### "도메인 용어" 감지
+### Detecting "domain terms"
 
-코드에서 반복적으로 등장하는 **비즈니스 도메인 용어**를 추출한다. 이것이 domain-specialist 에이전트의 프롬프트에 주입할 핵심 지식.
+Extract **business domain terms** that appear repeatedly in the code. This is the core knowledge to inject into a domain-specialist agent's prompt.
 
-**방법:**
-1. 클래스/함수/타입 이름에서 공통 접두어/접미어 추출
-2. 파일명에서 도메인 용어 추출 (user, order, payment, invoice, product 등)
-3. 주석이나 README에서 도메인 관련 설명 추출
+**How:**
+1. Extract common prefixes/suffixes from class/function/type names
+2. Extract domain terms from filenames (user, order, payment, invoice, product, etc.)
+3. Extract domain-related descriptions from comments or README
 
-### "복잡도 핫스팟" 감지
+### Detecting "complexity hotspots"
 
-가장 큰 파일, 가장 많이 의존되는 파일, 가장 많은 조건 분기를 가진 파일을 찾는다.
+Find the largest files, the most-depended-upon files, and the files with the most branching.
 
-**방법:**
-1. 파일 크기 상위 10개 나열
-2. `Grep(import.*from)` 결과에서 가장 많이 참조되는 파일
-3. 해당 파일을 Read하여 복잡도 판단
-
----
-
-## 4. 에이전트 필요성 판단 트리
-
-탐색 결과를 종합하여 추가 에이전트 필요성을 판단한다:
-
-```
-프로젝트 규모를 파악했는가?
-├── 모듈 5개 이상 → planner 에이전트 추가
-├── 모노레포 (패키지 2개+) → cross-package-coordinator 추가
-└── 작은 프로젝트 → 추가 에이전트 없이 코어 6으로 충분할 수 있음
-
-코드 패턴을 파악했는가?
-├── 반복 모듈 패턴 발견 → scaffold 에이전트 또는 스킬 후보
-├── 복잡한 비즈니스 로직 발견 → domain-specialist 추가
-│   (에이전트 프롬프트에 실제 도메인 용어, 파일 경로, 비즈니스 규칙 포함)
-└── 특별한 패턴 없음 → 추가 불필요
-
-인프라 복잡도를 파악했는가?
-├── DB + MQ + 외부 API → infra-specialist 추가
-├── CI/CD 파이프라인 → pipeline-guardian 추가
-└── 단순 인프라 → 추가 불필요
-
-테스트 현황을 파악했는가?
-├── test:source < 0.3 → qa-agent 추가
-├── 일관된 테스트 패턴 → test-scaffold 스킬 후보
-└── 테스트 충분 → 추가 불필요
-
-프론트엔드 컴포넌트가 있는가?
-├── UI 컴포넌트 다수 → ui-reviewer 추가
-└── 백엔드 only → 추가 불필요
-
-위에 해당하지 않는 프로젝트 고유의 복잡성이 있는가?
-├── 있음 → 사용자에게 설명하고 확인 후 커스텀 에이전트 생성
-└── 없음 → 추가 에이전트 없음
-```
-
-**최대 추가 에이전트 수 가이드:**
-- 소규모 프로젝트 (모듈 5개 미만): 0-1개 추가
-- 중규모 프로젝트 (모듈 5-15개): 1-3개 추가
-- 대규모 프로젝트 (모듈 15개+): 2-4개 추가
-
-에이전트가 너무 많으면 조율 오버헤드가 커진다. 3명의 집중된 에이전트가 6명의 범용 에이전트보다 낫다.
+**How:**
+1. List the top 10 files by size
+2. Use `Grep(import.*from)` to find the most-referenced files
+3. Read those files to assess complexity
 
 ---
 
-## 5. 에이전트 프롬프트에 프로젝트 지식 주입
+## 4. Decision tree for agent necessity
 
-커스텀 에이전트의 프롬프트에는 **이 프로젝트에서만 유효한 구체적 정보**를 주입한다.
+Synthesize exploration results to decide whether to add agents:
 
-### 주입할 정보 유형
+```
+Did you assess project size?
+├── 5+ modules → add planner agent
+├── Monorepo (2+ packages) → add cross-package-coordinator
+└── Small project → core 6 may be enough; no extra agents
 
-| 유형 | 예시 |
-|------|------|
-| 디렉토리 구조 | "src/modules/ 하위에 각 모듈이 위치" |
-| 파일 패턴 | "각 모듈은 {name}.controller.ts, {name}.service.ts 구조" |
-| 모듈 목록 | "현재 user, order, payment, notification 4개 모듈 존재" |
-| 도메인 용어 | "Order 상태: PENDING → CONFIRMED → SHIPPED → DELIVERED" |
-| 핵심 파일 | "결제 로직의 핵심: src/payment/payment.service.ts" |
-| 네이밍 규칙 | "파일명: kebab-case, 클래스명: PascalCase, 변수: camelCase" |
-| 테스트 패턴 | "테스트 파일: 같은 디렉토리에 {name}.spec.ts" |
+Did you assess code patterns?
+├── Found repeated module pattern → scaffold agent or skill candidate
+├── Found complex business logic → add domain-specialist
+│   (include real domain terms, file paths, business rules in the agent prompt)
+└── No special patterns → no addition needed
 
-### 주입 템플릿
+Did you assess infrastructure complexity?
+├── DB + MQ + external APIs → add infra-specialist
+├── CI/CD pipeline → add pipeline-guardian
+└── Simple infra → no addition needed
 
+Did you assess test status?
+├── test:source < 0.3 → add qa-agent
+├── Consistent test pattern → test-scaffold skill candidate
+└── Tests sufficient → no addition needed
+
+Are there frontend components?
+├── Many UI components → add ui-reviewer
+└── Backend only → no addition needed
+
+Is there project-specific complexity not covered above?
+├── Yes → explain to the user, confirm, then create a custom agent
+└── No → no extra agents
+```
+
+**Maximum extra agents — guidance:**
+- Small project (under 5 modules): 0-1 extra
+- Mid-sized project (5-15 modules): 1-3 extra
+- Large project (15+ modules): 2-4 extra
+
+Too many agents create coordination overhead. 3 focused agents beat 6 generic ones.
+
+---
+
+## 5. Injecting project knowledge into agent prompts
+
+A custom agent's prompt should contain **concrete information that is only valid in this project**.
+
+### Types of information to inject
+
+| Type | Example |
+|------|---------|
+| Directory structure | "Each module sits under src/modules/" |
+| File pattern | "Each module has {name}.controller.ts, {name}.service.ts" |
+| Module list | "Currently 4 modules: user, order, payment, notification" |
+| Domain terms | "Order states: PENDING → CONFIRMED → SHIPPED → DELIVERED" |
+| Key files | "Core payment logic: src/payment/payment.service.ts" |
+| Naming conventions | "Filenames: kebab-case, classes: PascalCase, vars: camelCase" |
+| Test pattern | "Test file: {name}.spec.ts in the same directory" |
+
+### Injection template
+
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ## 프로젝트 컨텍스트
 
@@ -246,13 +249,15 @@ src/
 
 이 프로젝트에서 작업할 때 위 구조와 패턴을 따른다.
 ```
+<!-- /user-facing -->
 
 ---
 
-## 6. Good vs Bad 에이전트 예시
+## 6. Good vs Bad agent examples
 
-### Good: 프로젝트 맞춤 에이전트
+### Good: project-tailored agent
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ---
 description: "이 프로젝트의 src/modules/ 하위 모듈 구조를 이해하고, 
@@ -277,9 +282,11 @@ description: "이 프로젝트의 src/modules/ 하위 모듈 구조를 이해하
 새 모듈 생성 시 위 구조를 정확히 재현한다.
 기존 모듈의 import 패턴과 네이밍 규칙을 따른다.
 ```
+<!-- /user-facing -->
 
-### Bad: 제네릭 에이전트
+### Bad: generic agent
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ---
 description: "NestJS DDD 프로젝트의 도메인 전문가. Bounded Context와 
@@ -291,7 +298,8 @@ description: "NestJS DDD 프로젝트의 도메인 전문가. Bounded Context와
 NestJS DDD 프로젝트의 도메인 모델을 검증하는 전문가입니다.
 Bounded Context 경계를 지키고 Aggregate 불변식을 확인합니다.
 ```
+<!-- /user-facing -->
 
-**차이점:**
-- Good: 프로젝트의 **실제** 경로, 모듈명, 파일 구성을 알고 있음
-- Bad: 아키텍처 레이블만 언급, 어떤 프로젝트에나 붙일 수 있는 범용 설명
+**The difference:**
+- Good: knows the **actual** paths, module names, and file layout of this project
+- Bad: only mentions architecture labels — generic enough to slap on any project

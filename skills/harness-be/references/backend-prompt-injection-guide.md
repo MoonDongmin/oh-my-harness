@@ -1,12 +1,14 @@
 # Backend Prompt Injection Guide
 
-`harness-be` Phase 3에서 감지 결과를 에이전트 프롬프트에 주입하는 규칙. 목표는 "백엔드 전용 appendix를 미리 작성해두지 않고, 감지된 실제 사실만 주입"하는 것.
+> **Language note**: This reference is in English (Claude-read instructions). User-facing strings wrapped in `<!-- user-facing -->` fences are Korean templates — do not translate them.
+
+Rules for `harness-be` Phase 3, where detection results are injected into agent prompts. The goal is "do not pre-write backend-specific appendices; inject only the actual facts that were detected."
 
 ---
 
 ## 1. Injection point
 
-중립화된 base agent 파일(`${CLAUDE_PLUGIN_ROOT}/agents/{name}.md`)은 `<Agent_Prompt>` XML 블록으로 감싼 구조다. 주입은 이 블록의 **닫는 태그 `</Agent_Prompt>` 직전**에 `<Project_Context>` 섹션을 추가한다.
+The neutralized base agent file (`${CLAUDE_PLUGIN_ROOT}/agents/{name}.md`) is wrapped in an `<Agent_Prompt>` XML block. Injection adds a `<Project_Context>` section **immediately before the closing `</Agent_Prompt>` tag**.
 
 ```xml
 <Agent_Prompt>
@@ -17,18 +19,18 @@
   <Investigation_Protocol>...</Investigation_Protocol>
   ...
   <Project_Context>
-    <!-- HERE: harness-be가 삽입하는 영역 -->
+    <!-- HERE: the area harness-be inserts -->
   </Project_Context>
 </Agent_Prompt>
 ```
 
-base prompt의 `<Role>`에는 "If a `<Project_Context>` block appears below, its contents are authoritative"라는 마커가 이미 존재하므로, 주입된 컨텍스트가 일반 가정을 오버라이드한다.
+The base prompt's `<Role>` already contains a marker that says "If a `<Project_Context>` block appears below, its contents are authoritative", so the injected context overrides any general assumption.
 
 ---
 
-## 2. 공통 필드 직렬화
+## 2. Common field serialization
 
-Phase 1의 감지 객체를 다음 형식으로 `<Project_Context>`에 기록한다. 모든 코어 6 에이전트가 같은 공통 필드를 받는다.
+Record the Phase 1 detection object in the following format inside `<Project_Context>`. All six core agents receive the same common fields.
 
 ```xml
 <Project_Context>
@@ -50,19 +52,19 @@ Phase 1의 감지 객체를 다음 형식으로 `<Project_Context>`에 기록한
 </Project_Context>
 ```
 
-값이 `none`/`unknown`/`[]`이면 그대로 기록한다 — 감지 실패를 숨기지 말 것. `unknown`이라고 기록된 필드를 보면 에이전트가 해당 영역을 직접 조사해야 한다는 신호다.
+If a value is `none`/`unknown`/`[]`, record it as-is — do not hide a detection failure. A field marked `unknown` is the signal that tells the agent to investigate that area itself.
 
 ---
 
-## 3. 에이전트별 추가 주입
+## 3. Per-agent additional injection
 
-공통 필드 외에 에이전트별로 필요한 추가 컨텍스트가 있다. 이는 공통 블록 다음에 에이전트별 `### {agent-name} specifics` 섹션으로 덧붙인다.
+Beyond the common fields, each agent needs extra context. Append it after the common block as an `### {agent-name} specifics` section.
 
 ### architect
 
 ```xml
 <Project_Context>
-  {공통 필드}
+  {common fields}
 
   ### architect specifics
   Analytical lens for this project: {architecture_style}
@@ -81,7 +83,7 @@ Phase 1의 감지 객체를 다음 형식으로 `<Project_Context>`에 기록한
 
 ```xml
 <Project_Context>
-  {공통 필드}
+  {common fields}
 
   ### test-engineer specifics
   Test runner: {test_stack}
@@ -93,13 +95,13 @@ Phase 1의 감지 객체를 다음 형식으로 `<Project_Context>`에 기록한
 </Project_Context>
 ```
 
-샘플링 로직: Phase 1에서 `Glob`으로 기존 테스트 파일 3개를 Read해서 경로 패턴·네이밍·assertion 스타일을 추출한다.
+Sampling logic: in Phase 1, Read 3 existing test files via `Glob` and extract path pattern, naming, and assertion style.
 
 ### executor
 
 ```xml
 <Project_Context>
-  {공통 필드}
+  {common fields}
 
   ### executor specifics
   Build command: {discovered from package.json scripts or Makefile — e.g. "bun run build" or "gradle build"}
@@ -110,13 +112,13 @@ Phase 1의 감지 객체를 다음 형식으로 `<Project_Context>`에 기록한
 </Project_Context>
 ```
 
-Phase 1에서 `package.json` scripts와 가장 큰 모듈의 파일 3개를 Read해서 관용구를 추출한다.
+In Phase 1, Read `package.json` scripts and 3 files from the largest module to extract idioms.
 
 ### code-reviewer
 
 ```xml
 <Project_Context>
-  {공통 필드}
+  {common fields}
 
   ### code-reviewer specifics
   Architecture rules to enforce (based on {architecture_style}):
@@ -139,7 +141,7 @@ Phase 1에서 `package.json` scripts와 가장 큰 모듈의 파일 3개를 Read
 
 ```xml
 <Project_Context>
-  {공통 필드}
+  {common fields}
 
   ### security-reviewer specifics
   Threat model weight (server-side, runtime = {framework}):
@@ -165,7 +167,7 @@ Phase 1에서 `package.json` scripts와 가장 큰 모듈의 파일 3개를 Read
 
 ```xml
 <Project_Context>
-  {공통 필드}
+  {common fields}
 
   ### debugger specifics
   Reproduce via: {discovered — e.g., "curl against the local dev server (port from config)", "pytest -k {test_name}", "go test ./...", "bun run start:dev then HTTP call"}
@@ -177,13 +179,13 @@ Phase 1에서 `package.json` scripts와 가장 큰 모듈의 파일 3개를 Read
 
 ---
 
-## 4. 리더 에이전트 주입 (tdd-leader, team-leader)
+## 4. Leader agent injection (tdd-leader, team-leader)
 
-리더는 세부 스폰 로직을 자체 본문에서 분기하므로, 주입 내용은 공통 필드만 포함한다 — 에이전트별 specifics는 주입하지 않는다.
+Leaders branch their detailed spawning logic in their own body, so the injection only includes common fields — no per-agent specifics are injected.
 
 ```xml
 <Project_Context>
-  {공통 필드만 — Skill/Language/Framework/Architecture style/Data layer/API style/Test stack}
+  {common fields only — Skill/Language/Framework/Architecture style/Data layer/API style/Test stack}
 
   ### leader specifics
   Extra agents available in this project: {list of conditional agents from Phase 4}
@@ -191,20 +193,20 @@ Phase 1에서 `package.json` scripts와 가장 큰 모듈의 파일 3개를 Read
 </Project_Context>
 ```
 
-리더는 이 정보를 보고 tdd-red/work-review 등 phase에서 어떤 전문가를 스폰할지 결정한다. harness-be가 생성한 프로젝트에서는 frontend 전문가(ui-reviewer, a11y-auditor, perf-auditor, component-test-engineer)가 "Extra agents available" 목록에 없으므로 리더가 스폰하지 않는다.
+The leader uses this information to decide which specialist to spawn during phases like tdd-red/work-review. In a project generated by harness-be, frontend specialists (ui-reviewer, a11y-auditor, perf-auditor, component-test-engineer) are not in the "Extra agents available" list, so the leader does not spawn them.
 
 ---
 
-## 5. 전문가 에이전트 주입 (domain-expert, api-specialist, data-engineer 등)
+## 5. Specialist agent injection (domain-expert, api-specialist, data-engineer, etc.)
 
-전문가 에이전트는 base prompt가 존재하지 않는다 — harness-be가 직접 프롬프트를 **처음부터** 작성한다. 이 때 Phase 1 감지 결과의 **실제 파일 경로, 모듈명, 도메인 용어**를 최소 3개 이상 프롬프트 본문에 포함한다.
+Specialist agents have no base prompt — harness-be writes the prompt **from scratch**. When doing so, embed at least three actual file paths, module names, or domain terms from the Phase 1 detection result into the prompt body.
 
-**domain-expert 예시 (생성된 프롬프트):**
+**domain-expert example (generated prompt):**
 
 ```markdown
 ---
 name: domain-expert
-description: "{architecture_style} 프로젝트의 도메인 모델 검증 전문가. {existing_modules}의 비즈니스 규칙 무결성을 확인한다."
+description: "Domain model verification specialist for a {architecture_style} project. Verifies the business-rule integrity of {existing_modules}."
 provider: claude
 model: claude-opus-4-6
 disallowedTools: Write, Edit
@@ -240,91 +242,92 @@ disallowedTools: Write, Edit
 </Agent_Prompt>
 ```
 
-**핵심**: "DDD 전문가" 같은 제네릭 프롬프트가 아니다. 이 프로젝트의 **실제 모듈명과 도메인 용어**가 프롬프트에 박혀 있어서, 에이전트가 해당 모듈에 특화된 전문가가 된다. 다른 프로젝트에 복사-붙여넣기가 안 된다 — 이것이 올바른 상태다.
+**Key point**: this is not a generic "DDD expert" prompt. The actual module names and domain terms of this project are baked into the prompt, making the agent a specialist for these specific modules. It cannot be copy-pasted into another project — and that is the correct state.
 
-동일한 원칙이 `api-specialist`, `data-engineer`, `infra-reviewer`, `monorepo-coordinator`, `qa-agent`에도 적용된다.
+The same principle applies to `api-specialist`, `data-engineer`, `infra-reviewer`, `monorepo-coordinator`, and `qa-agent`.
 
 ---
 
-## 6. 주입 실패 처리
+## 6. Handling injection failure
 
-- **감지가 unknown**: 그 필드를 `unknown`으로 주입한다. 에이전트는 마커를 보고 "Project_Context가 불완전하니 직접 조사하라"는 신호로 해석.
-- **파일 읽기 실패**: `notable_files`에 해당 파일을 빼고 기록. 주입 실패 사실을 CLAUDE.md의 harness-fingerprint 블록에 `detection_warnings: [...]`로 남김.
-- **architecture_style == unknown이고 사용자가 "모르겠음" 선택**: Phase 4 조건부 에이전트 중 architecture_style에 의존하는 것들(domain-expert)은 생성하지 않음. 사용자에게 "아키텍처 스타일이 명확해지면 `/oh-my-harness:harness-be` 재실행해 domain-expert를 추가할 수 있습니다"라고 안내.
+- **Detection is `unknown`**: inject the field as `unknown`. The agent reads the marker as the signal "Project_Context is incomplete — investigate directly".
+- **File read failure**: drop the file from `notable_files`. Record the injection failure in CLAUDE.md's harness-fingerprint block as `detection_warnings: [...]`.
+- **`architecture_style == unknown` and the user picked "I don't know"**: do not generate Phase 4 conditional agents that depend on `architecture_style` (e.g., domain-expert). Tell the user "Once the architecture style is clearer, re-run `/oh-my-harness:harness-be` to add domain-expert."
 
 ---
 
 ## 7. Idempotency
 
-같은 프로젝트에서 harness-be를 재실행할 때:
+When `harness-be` is re-run on the same project:
 
-1. 기존 CLAUDE.md의 `<!-- harness-fingerprint v1 -->` 블록을 Read.
-2. Phase 1 감지를 다시 실행.
-3. 새 감지 결과와 기존 fingerprint를 비교.
-4. 차이가 없으면: 에이전트 파일을 재작성하지 않고 "하네스가 이미 최신 상태입니다" 보고.
-5. 차이가 있으면: 차이를 사용자에게 요약해서 보여주고 확인 받은 뒤 재생성. 새 fingerprint로 블록 업데이트.
+1. Read the existing CLAUDE.md `<!-- harness-fingerprint v1 -->` block.
+2. Re-run Phase 1 detection.
+3. Compare the new detection result with the existing fingerprint.
+4. If there is no difference: do not rewrite agent files; report "the harness is already up to date".
+5. If there is a difference: summarize the diff for the user, get confirmation, then regenerate. Update the block with the new fingerprint.
 
-스킬에 대해서도 동일: Phase 5 게이트를 다시 띄우지 않는다. 사용자가 새 후보를 추가하고 싶으면 "skills 추가" 같은 명시 요청을 해야 함.
+The same applies to skills: do not re-open the Phase 5 gate. If the user wants to add new candidates, they must make an explicit request such as "add skills".
 
-이 원칙으로 재실행이 안전하다.
+This principle keeps re-runs safe.
 
 ---
 
-## 8. 스킬 본문 주입 규칙
+## 8. Skill body injection rules
 
-Phase 5 게이트를 통과한 후보의 SKILL.md 본문을 작성할 때, Phase 1 감지 객체의 어떤 필드를 어떻게 박는지에 대한 규칙. 에이전트 주입과 동일한 철학: **실제 사실만 박고, 일반화·이론은 박지 않는다**.
+After a candidate passes the Phase 5 gate, when writing the SKILL.md body, follow these rules for which Phase 1 detection fields to embed and how. Same philosophy as agent injection: **embed only actual facts, never generalizations or theory**.
 
-### 8-1. 어떤 필드를 본문 어디에 박는가
+### 8-1. Which fields go where in the body
 
-| 본문 섹션 | 박을 필드 | 박는 방식 |
+| Body section | Fields to embed | How to embed |
 |----------|---------|---------|
-| Description (frontmatter) | `domain_terms`, 후보 도출 시 정한 트리거 키워드 | 자연어 문장에 직접 인용. "src/modules/{모듈}/" 같은 실제 경로 1개 + 도메인 용어 2-3개 |
-| 프로젝트 컨텍스트 섹션 | `module_pattern`, `existing_modules`, `notable_files` | 디렉토리 트리 형식으로 기존 모듈 1개를 그대로 복사. 모듈 이름은 실제 모듈 중 하나(예: `user`, `order`)를 골라서 |
-| 워크플로우 Step | `data_layer`, `test_stack` 관련 명령어 | 해당 ORM/테스트 러너의 실제 명령어 (`bun prisma migrate dev`, `bun test order.spec.ts`) |
-| 네이밍 규칙 | Phase 1에서 추출한 케이스 컨벤션 | 실제 파일/클래스/변수 사례 1개씩 |
-| Import 규칙 | `notable_files`의 실제 import 첫 줄 3개 | tsconfig path alias가 있으면 alias 표기, 없으면 상대경로 표기 |
-| 주의사항 | `domain_terms` + 알려진 함정 | "이 프로젝트에서 {도메인 용어}는 {특정 의미}로 쓰임 — 혼동 주의" |
+| Description (frontmatter) | `domain_terms`, the trigger keywords chosen at candidate-discovery time | Quote them directly in natural-language sentences. One real path like `"src/modules/{module}/"` plus 2-3 domain terms |
+| Project context section | `module_pattern`, `existing_modules`, `notable_files` | A directory tree that copies one existing module verbatim. Pick one of the real modules (e.g., `user`, `order`) for the example |
+| Workflow steps | Commands related to `data_layer` and `test_stack` | The actual commands of that ORM/test runner (`bun prisma migrate dev`, `bun test order.spec.ts`) |
+| Naming rules | The case conventions extracted in Phase 1 | One real example each for files, classes, and variables |
+| Import rules | The first import line of each top-3 file in `notable_files` | Use the alias notation if a tsconfig path alias exists; otherwise relative path |
+| Cautions | `domain_terms` + known pitfalls | "In this project, {domain term} means {specific meaning} — do not confuse" |
 
-### 8-2. 박지 말 것
+### 8-2. Do NOT embed
 
-- 프레임워크 공식 문서 인용 (Claude가 이미 안다)
-- 일반 DDD/Clean/Hex 이론 (architect 에이전트가 처리)
-- "best practice" 류 일반론
-- 다른 프로젝트에서도 통하는 추상화
+- Quotes from the framework's official documentation (Claude already knows these)
+- Generic DDD/Clean/Hex theory (handled by the architect agent)
+- "Best practice" generalities
+- Abstractions that work in any project
 
-### 8-3. Before / After 예시
+### 8-3. Before / After example
 
-같은 후보 `order-field-sync` (사용자가 게이트에서 선택했다고 가정)를 두 가지 방식으로 작성한 비교.
+A comparison of the same candidate `order-field-sync` (assume the user selected it at the gate) written two ways.
 
-#### Before (컨텍스트 0주입 — Bad)
+#### Before (zero context injection — Bad)
 
 ```markdown
 ---
 name: order-field-sync
-description: "주문 모듈에 새 필드를 추가할 때 관련 파일들을 동기화한다."
+description: "Synchronize related files when adding a new field to the order module."
 ---
 
 # Order Field Sync
 
-이 스킬은 주문 모듈에 필드를 추가할 때 사용한다.
+Use this skill when adding a field to the order module.
 
-## 워크플로우
+## Workflow
 
-1. 스키마에 필드를 추가한다.
-2. 마이그레이션을 생성한다.
-3. DTO를 업데이트한다.
-4. 컨트롤러에 반영한다.
-5. 테스트를 작성한다.
+1. Add the field to the schema.
+2. Generate a migration.
+3. Update the DTO.
+4. Reflect it in the controller.
+5. Write a test.
 ```
 
-**문제점**:
-- description에 트리거 키워드 없음, 경계 조건 없음 → trigger 약함
-- 본문에 실제 파일 경로 0개 → Claude가 매번 디렉토리 탐색해야 함
-- "스키마", "DTO" 어느 ORM/패턴인지 명시 없음 → Claude가 추측해야 함
-- 다른 NestJS+Prisma 프로젝트에 복붙해도 통함 = 이 프로젝트 가치 0
+**Problems**:
+- Description has no trigger keywords and no boundary conditions → weak trigger
+- Body has zero real file paths → Claude must browse the directory every time
+- "schema" and "DTO" do not specify which ORM/pattern → Claude has to guess
+- Copy-pastes into any other NestJS+Prisma project = zero value to this project
 
-#### After (컨텍스트 3+ 주입 — Good)
+#### After (3+ context injections — Good)
 
+<!-- user-facing (Korean, do not translate — this example is intentionally Korean because the skill body ships into the user's project) -->
 ```markdown
 ---
 name: order-field-sync
@@ -385,21 +388,24 @@ bun prisma migrate dev --name add_order_{field_name}
 - prisma migration 후 `bun prisma generate`를 잊지 말 것 — 잊으면 ts 컴파일 에러.
 - order.spec.ts는 OrderRepository를 mock하지 말 것 (이 프로젝트 컨벤션: 단위 테스트도 인메모리 prisma 사용).
 ```
+<!-- /user-facing -->
 
-**왜 Good인가**:
-- description: 5개 트리거 키워드 + 경계 조건 ("단순 조회 트리거 금지")
-- 실제 파일 경로 7개 박힘 (`src/modules/order/order.controller.ts` 등)
-- 실제 import 패턴 3개 박힘
-- 실제 명령어 (`bun prisma migrate dev --name ...`) + Why-First 설명 (`db push` 금지 이유)
-- 도메인 용어 차이 명시 ("Order vs Cart")
-- 다른 프로젝트에 복붙 불가 = 이 프로젝트 가치 max
+**Why this is Good**:
+- description: 5 trigger keywords + boundary condition ("do not trigger on simple lookups")
+- 7 real file paths embedded (`src/modules/order/order.controller.ts` etc.)
+- 3 real import patterns embedded
+- Real commands (`bun prisma migrate dev --name ...`) + Why-First explanation (why `db push` is forbidden)
+- Domain term distinction stated ("Order vs Cart")
+- Cannot be copy-pasted into another project = max value to this project
 
-### 8-4. 주입 검증 체크리스트
+Note: the After example body is intentionally Korean because it is the **user-facing skill content** that ends up in the user's project. The skill body is read by Claude inside the user's project but the user reads/owns it too.
 
-스킬 본문 작성 후 다음을 자가검증:
+### 8-4. Injection verification checklist
 
-- [ ] description에 실제 경로 1개 + 트리거 키워드 3개 이상
-- [ ] 본문에 실제 파일 경로 최소 3개
-- [ ] 본문에 실제 명령어 최소 1개 (프로젝트 build/test/migration tool 기반)
-- [ ] 본문에 도메인 용어 최소 2개 (이 프로젝트 어휘로)
-- [ ] "다른 프로젝트에 복붙해도 통하는가?" → 통하면 실패. 이 프로젝트만의 사실이 부족함
+After writing the skill body, self-verify against:
+
+- [ ] Description contains at least 1 real path and at least 3 trigger keywords
+- [ ] Body contains at least 3 real file paths
+- [ ] Body contains at least 1 real command (based on the project's build/test/migration tool)
+- [ ] Body contains at least 2 domain terms (in this project's vocabulary)
+- [ ] "Would copy-pasting into another project still work?" → if yes, the skill failed. The body lacks facts unique to this project.

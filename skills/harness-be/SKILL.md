@@ -1,43 +1,52 @@
 ---
 name: harness-be
-description: "백엔드 프로젝트 전용 하네스 빌더. 프로젝트 루트를 스캔해 language/framework/architecture_style/data_layer/api_style/test_stack을 감지한 뒤, 코어 6 에이전트 + 리더 2 + 조건부 전문가를 프로젝트 증거와 함께 생성한다. (1) '백엔드 하네스 만들어줘', 'harness-be', 'backend harness' 요청 시, (2) NestJS/Express/Fastify/FastAPI/Django/Spring/Go 등 서버 프로젝트에서 팀 세팅 요청 시, (3) 기존 하네스를 백엔드 관점으로 재구성할 때, (4) 라우터 스킬(harness)이 BE로 분기했을 때 자동 호출."
+description: "Backend-only harness builder. Scans the project root to detect language / framework / architecture_style / data_layer / api_style / test_stack, then generates the core 6 agents + 2 leaders + conditional specialists with concrete project evidence injected. Triggers: '백엔드 하네스 만들어줘', 'harness-be', 'backend harness', team setup on server projects (NestJS / Express / Fastify / FastAPI / Django / Spring / Go etc.), reconfiguring an existing harness from a backend perspective, and automatic invocation when the router skill (harness) branches to BE."
 allowed-tools: Read Glob Grep "Bash(git *)" "Bash(ls *)"
 ---
 
 # Harness-BE — Backend Agent Team Builder
 
-백엔드 프로젝트에 맞는 에이전트 팀을 구축한다. **핵심 원칙**: DDD/Hexagonal/NestJS 같은 특정 프레임워크·아키텍처를 전제하지 않는다. 프로젝트를 먼저 스캔해 사실을 감지하고, 감지된 증거를 에이전트 프롬프트에 주입한다.
+Builds the agent team for a backend project. **Core principle**: do not assume any specific framework or architecture (DDD / Hexagonal / NestJS). Scan the project first, detect facts, and inject the detected evidence into the agent prompts.
 
-**이 스킬의 주요 책임:**
-1. 백엔드 프로젝트를 스캔해 구조화된 감지 객체 생성 (language/framework/architecture_style/data_layer/api_style/test_stack/module_pattern/domain_terms)
-2. 코어 6 에이전트 + 리더 2를 `<Project_Context>` 주입과 함께 생성
-3. 감지 결과에 조건부로 매칭되는 전문가 에이전트(domain-expert/api-specialist/data-engineer/infra-reviewer/monorepo-coordinator/qa-agent) 합성
-4. 프로젝트 반복 패턴 기반 스킬 후보 도출 → 사용자 승인 게이트 → 선택된 것만 도메인 용어 유도 이름으로 생성 (0개도 정상)
-5. CLAUDE.md에 `harness-fingerprint` 블록 등록 — tdd/implement 스킬이 나중에 읽어서 재사용
+## Language Policy
 
-## 호출 패턴
+**All user-facing output must be in Korean.** This file is written in English for token efficiency (Claude reads it as instructions), but anything the end user sees — `AskUserQuestion` text, progress messages, error messages, final summaries, CLAUDE.md blocks written into the project — must be rendered in natural Korean.
 
-| 입력 | 동작 |
+- Claude-directed instructions in this file: English.
+- Embedded Korean strings marked `<!-- user-facing -->`: literal templates, never translate.
+- Frontmatter `description` Korean triggers: literal, never translate.
+- When you narrate progress to the user or write a summary, translate to natural Korean first — do not surface English reasoning text directly.
+
+**Primary responsibilities of this skill:**
+1. Scan the backend project and produce a structured detection object (language / framework / architecture_style / data_layer / api_style / test_stack / module_pattern / domain_terms)
+2. Generate the core 6 agents + 2 leaders with `<Project_Context>` injection
+3. Conditionally compose specialist agents (domain-expert / api-specialist / data-engineer / infra-reviewer / monorepo-coordinator / qa-agent) that match the detection
+4. Derive skill candidates from repeated project patterns → user approval gate → only generate the selected ones using domain-derived names (zero is a valid result)
+5. Register a `harness-fingerprint` block in CLAUDE.md — the tdd / implement skills read it later for reuse
+
+## Invocation Patterns
+
+| Input | Behavior |
 |------|------|
-| `/oh-my-harness:harness-be` | 백엔드 감지 → 하네스 빌드 |
-| `/oh-my-harness:harness-be {기능}` | 빌드 + 해당 기능 작업 시작 |
-| 라우터가 호출 (`/oh-my-harness:harness` → BE 분기) | 동일 |
+| `/oh-my-harness:harness-be` | Backend detection → harness build |
+| `/oh-my-harness:harness-be {feature}` | Build + start working on the feature |
+| Invoked by router (`/oh-my-harness:harness` → BE branch) | Same |
 
-## 워크플로우
+## Workflow
 
-### Phase 0: 기존 하네스 확인
+### Phase 0: Check for existing harness
 
-프로젝트의 `.claude/agents/`, `.claude/skills/`, `CLAUDE.md`를 읽는다.
+Read the project's `.claude/agents/`, `.claude/skills/`, and `CLAUDE.md`.
 
-- **신규 구축**: 하네스 디렉토리가 비어있음 → Phase 1부터 전체 실행
-- **기존 확장**: 기존 하네스가 있고 추가 요청 → 필요한 Phase만 선택 실행
-- **유지보수**: 점검·동기화 요청 → Phase 7
+- **New build**: harness directory empty → run from Phase 1 in full
+- **Extension**: harness exists, additional request → run only the necessary phases
+- **Maintenance**: audit / sync request → Phase 7
 
-CLAUDE.md에 `<!-- harness-fingerprint v1 -->` 블록이 있으면 읽어서 기존 감지 결과를 확인한다. 같은 fingerprint로 재실행 시 불필요한 재스캔을 피한다.
+If `<!-- harness-fingerprint v1 -->` exists in CLAUDE.md, read it to recover the previous detection result. Re-running with the same fingerprint avoids unnecessary re-scanning.
 
-### Phase 1: Backend Detection (핵심 신규 로직)
+### Phase 1: Backend Detection (the new core logic)
 
-`references/backend-detection-protocol.md`에 정의된 감지 트리를 실행한다. 결과는 다음 구조체로 메모리에 저장한다.
+Run the detection tree defined in `references/backend-detection-protocol.md`. Store the result in memory using the following structure.
 
 ```yaml
 language: typescript | javascript | python | java | kotlin | go | rust | ruby | php | unknown
@@ -46,23 +55,25 @@ architecture_style: hexagonal | clean | layered | mvc | modular-monolith | featu
 data_layer: prisma | typeorm | drizzle | sequelize | mikro-orm | sqlalchemy | gorm | hibernate | raw-sql | none
 api_style: rest | graphql | grpc | trpc | hybrid | none
 test_stack: jest | vitest | mocha | pytest | go-test | junit | rspec | none
-infra: [docker, k8s, terraform, github-actions, ...]  # 감지된 태그 배열
-module_pattern: "src/modules/{name}/{name}.controller.ts, .service.ts, .repository.ts"  # 실제 발견된 패턴 문자열
+infra: [docker, k8s, terraform, github-actions, ...]  # array of detected tags
+module_pattern: "src/modules/{name}/{name}.controller.ts, .service.ts, .repository.ts"  # actual pattern string discovered
 existing_modules: [user, order, payment, ...]
 domain_terms: [Order, Invoice, Subscription, ...]
 notable_files: [top 3 entry points — src/main.ts, etc.]
 test_source_ratio: 0.42
 ```
 
-**감지 원칙:**
+**Detection principles:**
 
-- **증거 우선**: 의존성 이름만 보고 판단하지 않는다. 예를 들어 `@nestjs/*`가 있더라도 `domain/ports/adapters` 디렉토리가 실제로 있어야 `architecture_style: hexagonal`이다.
-- **중립성 우선**: 매칭이 안 되면 `unknown`을 선택하고, 사용자에게 확인 질문을 하거나 Project_Context에 "architecture_style: unknown"을 그대로 주입한다. 추측하지 않는다.
-- **복수 근거 수집**: architecture_style 감지는 반드시 3-step 증거(디렉토리 구조 + 파일 네이밍 + 샘플 import 패턴)를 모두 확인한다.
+- **Evidence first**: do not decide based on dependency names alone. For example, the presence of `@nestjs/*` is not enough — `domain/ports/adapters` directories must actually exist before declaring `architecture_style: hexagonal`.
+- **Neutrality first**: when nothing matches, pick `unknown` and either ask the user or inject `architecture_style: unknown` into Project_Context as-is. Do not guess.
+- **Multiple corroborating sources**: architecture_style detection must check all three evidence steps (directory structure + file naming + sample import patterns).
 
-**감지 애매한 경우 (architecture_style == unknown):**
+**When detection is ambiguous (architecture_style == unknown):**
 
-AskUserQuestion으로 사용자에게 묻는다:
+Ask the user via AskUserQuestion:
+
+<!-- user-facing (Korean, do not translate) -->
 ```
 이 프로젝트의 주요 아키텍처 스타일은?
 [1] Hexagonal (Ports & Adapters)
@@ -71,21 +82,26 @@ AskUserQuestion으로 사용자에게 묻는다:
 [4] MVC
 [5] 기타 / 해당 없음
 ```
+<!-- /user-facing -->
 
-사용자가 답하면 `architecture_style_user_declared: true` 플래그와 함께 저장한다.
+When the user answers, store it together with an `architecture_style_user_declared: true` flag.
 
-### Phase 2: 모델 선택 질문
+### Phase 2: Model-selection question (mandatory — do not skip)
 
-기존 `skills/harness/SKILL.md`의 Phase 1-1 로직을 그대로 재사용한다. 코어 6 에이전트(architect/test-engineer/executor/code-reviewer/security-reviewer/debugger)를 순차 AskUserQuestion으로 모델 선택받고, 마지막에 최종 확인 submit를 받는다.
+**Required**: Read `../harness/references/model-selection-protocol.md` and execute the procedure inside it exactly. That file defines the sequential `AskUserQuestion` flow for the core 6 agents, the option definitions, the response-interpretation rules, the final confirmation submit, and the fixed leader values.
 
-리더 2(tdd-leader, team-leader)는 Opus 고정으로 생성한다.
+The `model_selection` structure produced by the protocol is used in Phase 3 as each agent's frontmatter (provider/model). When Codex is selected, a `codex_delegate: true` flag is also recorded; Phase 3 reads that flag and generates the agent using the Codex CLI delegation template.
 
-### Phase 3: 에이전트 생성 (감지 주입)
+The two leaders (`tdd-leader`, `team-leader`) are pinned to **Opus without asking**, per protocol §6.
 
-각 코어 에이전트를 `{프로젝트}/.claude/agents/{name}.md`에 생성한다. 생성 단계:
+> ⚠️ **Regression guard**: an earlier version of this phase pointed to a Phase 1-1 block in `skills/harness/SKILL.md`, which became orphaned after the router refactor removed it. This phase now reads the shared reference file directly, so drift cannot recur.
 
-1. **Read base**: `${CLAUDE_PLUGIN_ROOT}/agents/{name}.md`를 Read. 이 파일들은 중립화되어 있으며 `<Project_Context>` 우선 마커를 포함한다.
-2. **Serialize context**: Phase 1 감지 객체를 다음 XML 블록으로 직렬화.
+### Phase 3: Agent generation (with detection injection)
+
+Generate each core agent at `{project}/.claude/agents/{name}.md`. Generation steps:
+
+1. **Read base**: Read `${CLAUDE_PLUGIN_ROOT}/agents/{name}.md`. These files are neutralized and contain a `<Project_Context>` priority marker.
+2. **Serialize context**: Serialize the Phase 1 detection object into the following XML block.
 
 ```xml
 <Project_Context>
@@ -110,67 +126,70 @@ AskUserQuestion으로 사용자에게 묻는다:
 </Project_Context>
 ```
 
-3. **Merge frontmatter**: 사용자가 선택한 provider/model로 프론트매터 작성. Codex 선택 시 Codex CLI 위임 템플릿 사용.
-4. **Insert before closing tag**: base prompt의 `</Agent_Prompt>` 직전에 `<Project_Context>` 삽입.
-5. **Write**: `{프로젝트}/.claude/agents/{name}.md`에 저장.
+3. **Merge frontmatter**: write the frontmatter using the user-selected provider/model. When Codex is selected, use the Codex CLI delegation template.
+4. **Insert before closing tag**: insert `<Project_Context>` just before `</Agent_Prompt>` in the base prompt.
+5. **Write**: save to `{project}/.claude/agents/{name}.md`.
 
-리더 2(tdd-leader, team-leader)는 원본(`${CLAUDE_PLUGIN_ROOT}/agents/{tdd-leader,team-leader}.md`)을 읽어 동일한 방식으로 `<Project_Context>`를 주입해 저장한다. 리더 레벨에는 architecture_style/framework/test_stack만 포함 — 세부 스폰 로직은 리더 본문에서 분기한다.
+The two leaders (tdd-leader, team-leader) are produced the same way — read the originals at `${CLAUDE_PLUGIN_ROOT}/agents/{tdd-leader,team-leader}.md` and inject `<Project_Context>` before saving. At the leader level, only architecture_style / framework / test_stack are included — detailed spawn logic branches inside the leader bodies themselves.
 
-> 상세 주입 규칙: `references/backend-prompt-injection-guide.md` 참조.
+> Detailed injection rules: see `references/backend-prompt-injection-guide.md`.
 
-### Phase 4: 동적 조건부 에이전트
+### Phase 4: Dynamic conditional agents
 
-감지 결과에 따라 아래 전문가 에이전트를 조건부로 생성한다. **프레임워크 이름이 아니라 감지된 사실이 판단 근거다.**
+Conditionally generate the specialist agents below based on the detection result. **The judgment is grounded in detected facts, not in framework names.**
 
-| 조건 | 생성 에이전트 | 주입 내용 |
+| Condition | Agent generated | Injected content |
 |---|---|---|
-| `architecture_style ∈ {hexagonal, clean, modular-monolith}` AND `domain/`·`entities/` 파일 ≥ 5개 | `domain-expert` | 실제 도메인 용어, 발견된 aggregate/entity 이름, 도메인 디렉토리 경로 |
-| `api_style ∈ {rest, graphql, grpc, trpc}` AND 컨트롤러/라우터 파일 ≥ 5개 | `api-specialist` | 감지된 API 스타일, 라우팅 파일 경로, 스키마 위치 |
-| `data_layer ≠ none` AND 마이그레이션 디렉토리 존재 | `data-engineer` | 감지된 ORM, 스키마 파일, 마이그레이션 경로 |
-| `infra` 태그에 docker/k8s/terraform 포함 | `infra-reviewer` | 감지된 infra 태그, 설정 파일 경로 |
-| 모노레포 도구 감지 (turbo/nx/lerna/workspaces) | `monorepo-coordinator` | 감지된 모노레포 도구, 패키지 목록 |
-| `test_source_ratio < 0.3` | `qa-agent` | 현재 비율, 커버리지 갭 영역 |
+| `architecture_style ∈ {hexagonal, clean, modular-monolith}` AND `domain/` / `entities/` files ≥ 5 | `domain-expert` | actual domain terms, discovered aggregate / entity names, domain directory paths |
+| `api_style ∈ {rest, graphql, grpc, trpc}` AND controller / router files ≥ 5 | `api-specialist` | detected API style, routing file paths, schema location |
+| `data_layer ≠ none` AND a migrations directory exists | `data-engineer` | detected ORM, schema files, migrations path |
+| `infra` tags include docker / k8s / terraform | `infra-reviewer` | detected infra tags, config file paths |
+| Monorepo tooling detected (turbo / nx / lerna / workspaces) | `monorepo-coordinator` | detected monorepo tool, package list |
+| `test_source_ratio < 0.3` | `qa-agent` | current ratio, areas with coverage gaps |
 
-**핵심 변화**: `domain-expert`는 `hexagonal`·`clean`·`modular-monolith`에서만 생성된다. 단순 Express CRUD (`architecture_style: simple`) 프로젝트에서는 생성되지 않는다. 이것이 "프레임워크 전제 제거 + 감지 기반 합성"의 구체적 실현이다.
+**Critical change**: `domain-expert` is only generated for `hexagonal` / `clean` / `modular-monolith`. It is **not** generated for a plain Express CRUD project (`architecture_style: simple`). This is the concrete realization of "remove framework assumptions + synthesize from detection".
 
-각 전문가 에이전트의 프롬프트에는 Phase 1에서 수집한 **실제 경로, 파일명, 도메인 용어**를 최소 3개 이상 주입한다. 제네릭 전문가("DDD 전문가")는 생성하지 않는다.
+Each specialist agent's prompt must inject **at least 3 actual paths, file names, and domain terms** collected in Phase 1. Do not generate generic specialists ("DDD expert").
 
-### Phase 5: 스킬 생성 (사용자 승인 게이트)
+### Phase 5: Skill generation (user approval gate)
 
-> **핵심 변화**: 이전에는 고정된 "조건 → 스킬 이름" 매트릭스로 자동 생성했지만, 이 방식은 사용자가 안 쓰는 제네릭 스킬을 양산했다. 이제는 **후보 도출 → 사용자 승인 → 선택된 것만 생성** 흐름이다. **0개 생성도 정상 종료**다.
+> **Critical change**: previously skills were auto-generated from a fixed "condition → skill name" matrix, which spawned generic skills the user never used. The flow is now **derive candidates → user approval → generate only what was selected**. **Producing zero skills is a valid completion.**
 
-#### Step 1 — 가이드 로드 (필수)
+#### Step 1 — Load the guides (mandatory)
 
-다음 두 파일을 반드시 Read한다. 이 단계를 건너뛰면 LLM이 매트릭스 매칭 모드로 빠진다.
+Read both of the following files. Skipping this step causes the LLM to fall back to matrix-matching mode.
 
-- `../harness/references/skill-generation-guide.md` — 후보 도출 5단계 절차 + 네이밍 금지 목록 + 사용자 게이트 형식
-- `../harness/references/skill-writing-guide.md` — 스킬 본문 작성 원칙 (Description pushy, Why-First, 명령형)
+- `../harness/references/skill-generation-guide.md` — 5-step candidate derivation procedure + naming blocklist + user gate format
+- `../harness/references/skill-writing-guide.md` — skill body authoring principles (pushy Description, Why-First, imperative)
 
-#### Step 2 — 후보 도출 (3단계 유도, 4개 상한)
+#### Step 2 — Derive candidates (3-stage funnel, max 4)
 
-가이드 §1의 5단계 탐색(Step A-E)을 그대로 따른다. 요약:
+Follow guide §1's 5-step exploration (Step A–E) exactly. Summary:
 
-1. **관찰**: Phase 1 감지 객체(`module_pattern`, `existing_modules`, `domain_terms`, `notable_files`)와 실제 디렉토리 트리를 다시 본다
-2. **가설**: "이 프로젝트의 사람이 한 달 안에 같은 일을 3번+ 할 작업"을 자유 문장으로 5-8개 (이 단계에 이름 짓지 말 것)
-3. **검증**: 각 가설이 실제 파일로 1-2개 확인되는지 체크. 검증 안 되면 버림
-4. **이름 짓기**: 살아남은 가설마다 스킬 이름을 **프로젝트 모듈명·도메인 용어·실제 디렉토리 이름에서 직접 유도**
-5. **필터링**: §2 판단 기준으로 거른 뒤 **최대 4개로 줄임** (단일 `AskUserQuestion` 옵션 4개 상한 + 결정 피로 완화)
+1. **Observe**: re-examine the Phase 1 detection object (`module_pattern`, `existing_modules`, `domain_terms`, `notable_files`) and the actual directory tree
+2. **Hypothesize**: write 5–8 free-form sentences describing "tasks a person on this project would do 3+ times in a month" (do not name them yet at this stage)
+3. **Validate**: confirm each hypothesis against 1–2 actual files. Drop anything unconfirmed
+4. **Name**: for each surviving hypothesis, derive the skill name **directly from the project's module names, domain terms, and actual directory names**
+5. **Filter**: apply the §2 judgment criteria, then **trim to a maximum of 4** (single `AskUserQuestion` option cap of 4 + decision-fatigue mitigation)
 
-> ⚠️ **네이밍 인라인 경고**: 후보 이름이 `migration-check`, `api-workflow`, `domain-check`, `cross-package`, `pipeline-check`, `config-sync`, `test-scaffold` 같은 제네릭 일반명사면 **즉시 reject하고 다시 명명**한다. 이 이름들은 가이드 §6 네이밍 금지 목록에 박혀있다. 어떤 NestJS 프로젝트에도 통하는 이름은 이 프로젝트에 통하지 않는다.
+> ⚠️ **Inline naming warning**: if a candidate name is a generic noun like `migration-check`, `api-workflow`, `domain-check`, `cross-package`, `pipeline-check`, `config-sync`, or `test-scaffold`, **reject and rename immediately**. These names are pinned in guide §6's naming blocklist. A name that fits any NestJS project does not fit *this* project.
 
-#### Step 3 — 사용자 승인 게이트 (필수)
+#### Step 3 — User approval gate (mandatory)
 
-후보가 1개 이상이면 `AskUserQuestion`(multiSelect=true)으로 사용자에게 묻는다. 후보가 0개면 이 단계를 건너뛰고 사용자에게 "이번 빌드에 자동 생성할 만한 반복 패턴을 못 찾았다"고 한 줄로 알린 뒤 Phase 6으로 직진.
+If there is at least one candidate, ask the user via `AskUserQuestion` (multiSelect=true). If there are zero candidates, skip this step, tell the user in one line that no auto-generatable repeated patterns were found for this build, and proceed straight to Phase 6.
 
+<!-- user-facing (Korean, do not translate) -->
 ```
 question: "이 프로젝트에서 자동 생성할 보조 스킬을 선택해줘. 0개 선택도 OK."
 header:   "스킬 후보"
 multiSelect: true
 options: [최대 4개]
 ```
+<!-- /user-facing -->
 
-각 옵션 description은 **3요소 필수** (가이드 §7):
+Each option's description must contain **all 3 elements** (guide §7):
 
+<!-- user-facing (Korean, do not translate) -->
 ```
 label: order-field-sync
 description: "src/modules/order/ 작업 시 prisma·migration·dto·controller 4곳 동기화.
@@ -178,23 +197,25 @@ description: "src/modules/order/ 작업 시 prisma·migration·dto·controller 4
               트리거: '주문 필드 추가', '주문 마이그레이션', 'order schema'.
               주입 컨텍스트: src/modules/order/, prisma/schema.prisma."
 ```
+<!-- /user-facing -->
 
-사용자가 0개 선택해도 정상 — Step 4를 건너뛰고 Step 5로.
+A zero-selection answer is fine — skip Step 4 and go to Step 5.
 
-#### Step 4 — 선택된 스킬 본문 작성
+#### Step 4 — Write the selected skill bodies
 
-사용자가 선택한 후보에 대해서만 `{프로젝트}/.claude/skills/{name}/SKILL.md`를 생성한다.
+For each candidate the user selected, generate `{project}/.claude/skills/{name}/SKILL.md`.
 
-각 스킬 작성 시:
-1. **Description**: 가이드 §3 + skill-writing-guide §1의 pushy 트리거 원칙. 트리거 키워드 3개 이상 + 경계 조건 명시
-2. **본문 주입**: Phase 1 감지 객체에서 **실제 파일 경로·import 패턴·모듈명·도메인 용어를 최소 3개** 본문에 박는다. 어떤 필드를 어떻게 박는지는 `references/backend-prompt-injection-guide.md`의 "스킬 본문 주입 규칙" 섹션 참조
-3. **본문 작성 원칙**: Why-First (ALWAYS/NEVER 금지) / Lean (500줄 이내) / 명령형 ("~한다"/"~하라")
-4. **500줄 초과 시**: `references/`로 분리하고 본문에 포인터만 남김
+When writing each skill:
+1. **Description**: pushy trigger principles from guide §3 + skill-writing-guide §1. At least 3 trigger keywords + explicit boundary conditions
+2. **Body injection**: inject **at least 3 actual file paths, import patterns, module names, and domain terms** from the Phase 1 detection object into the body. See the "skill body injection rules" section of `references/backend-prompt-injection-guide.md` for exactly which fields go where
+3. **Body authoring principles**: Why-First (no ALWAYS/NEVER) / Lean (under 500 lines) / imperative ("~한다" / "~하라")
+4. **If over 500 lines**: split into `references/` and leave only a pointer in the body
 
-#### Step 5 — CLAUDE.md 임시 동기화
+#### Step 5 — Provisional CLAUDE.md sync
 
-생성된 스킬 디렉토리 트리만 CLAUDE.md에 즉시 기록한다 (Phase 6 fingerprint 확정과 분리). 세션 중단 대비 임시 동기화이며, 어디까지 갔는지 복구 가능하게 한다.
+Record only the generated skill directory tree into CLAUDE.md immediately (separated from the Phase 6 fingerprint finalization). This is a provisional sync that protects against session interruption — it makes recovery possible by recording how far we got.
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ## 하네스 (Backend) — 빌드 진행 중
 
@@ -204,21 +225,23 @@ description: "src/modules/order/ 작업 시 prisma·migration·dto·controller 4
 
 (fingerprint는 Phase 6에서 확정)
 ```
+<!-- /user-facing -->
 
-스킬 0개면 이 섹션은 비워둔다.
+If zero skills were generated, leave this section blank.
 
-#### Step 6 — 0개 케이스 정상 종료
+#### Step 6 — Zero case is a normal exit
 
-사용자가 0개 선택했거나 후보가 0개였다면, `.claude/skills/` 디렉토리는 비어있는 상태로 Phase 6으로 진행한다. 빌드는 정상 완료. 코어 6 + 리더 2 + 조건부 전문가 에이전트는 이미 Phase 3-4에서 만들어졌으므로 하네스 자체는 작동한다.
+If the user picked zero or there were zero candidates, advance to Phase 6 with `.claude/skills/` left empty. The build completes normally. The core 6 + 2 leaders + conditional specialists were already created in Phases 3–4, so the harness itself is functional.
 
-fingerprint의 `skills_generated` 필드는 빈 배열 `[]`로 기록.
+The fingerprint's `skills_generated` field is recorded as an empty array `[]`.
 
-> ⚠️ **억지로 채우지 말 것**: "그래도 1개는 만들어야지"라는 본능을 차단한다. 사용자가 거부한 후보를 다시 만들거나, "내장 스킬"이라는 명목으로 자동 생성하지 않는다. 0은 0이다.
+> ⚠️ **Do not force-fill**: suppress the instinct to "make at least one anyway". Do not regenerate candidates the user rejected, and do not auto-create things under the label of "built-in skills". Zero means zero.
 
-### Phase 6: CLAUDE.md 하네스 컨텍스트 + Fingerprint 등록 (최종 확정)
+### Phase 6: CLAUDE.md harness context + fingerprint registration (final)
 
-Phase 5 Step 5의 임시 동기화 섹션을 지우고, 최종 컨텍스트와 fingerprint 블록으로 교체한다. 이 블록은 tdd/implement 스킬이 파이프라인 실행 시 읽어서 재활용한다.
+Remove the provisional sync section from Phase 5 Step 5 and replace it with the final context and fingerprint block. The tdd / implement skills read this block at pipeline execution time and reuse it.
 
+<!-- user-facing (Korean, do not translate) -->
 ```markdown
 ## 하네스 (Backend)
 
@@ -256,39 +279,40 @@ extra_agents: {list of conditional agents spawned}
 skills_generated: {list}
 <!-- /harness-fingerprint -->
 ```
+<!-- /user-facing -->
 
-### Phase 7: 기능 작업 (선택적)
+### Phase 7: Feature work (optional)
 
-`/oh-my-harness:harness-be {기능}`으로 호출된 경우, Phase 0에서 파싱한 기능 요청을 오케스트레이터 스킬이나 `implement`/`tdd` 스킬로 넘긴다.
+When invoked as `/oh-my-harness:harness-be {feature}`, hand off the feature request parsed in Phase 0 to an orchestrator skill or to the `implement` / `tdd` skill.
 
-### Phase 8: 유지보수
+### Phase 8: Maintenance
 
-기존 하네스가 있을 때 Phase 0에서 "유지보수" 분기로 진입하면:
+When an existing harness is present and Phase 0 routes here for "maintenance":
 
-1. **현황 감사**: `.claude/agents/`와 CLAUDE.md 테이블 비교, 불일치 감지
-2. **재감지**: Phase 1을 다시 실행해 최신 감지 결과를 만들고 기존 fingerprint와 비교
-3. **차이 적용**: 차이가 있으면 사용자에게 설명하고 점진적으로 반영
-4. **Fingerprint 갱신**
+1. **Audit current state**: compare `.claude/agents/` against the CLAUDE.md table and detect drift
+2. **Re-detect**: re-run Phase 1 to produce a current detection result and compare to the existing fingerprint
+3. **Apply differences**: if there are differences, explain them to the user and apply them incrementally
+4. **Update fingerprint**
 
-**스킬 게이트 idempotency**: 유지보수 모드에서는 Phase 5 게이트를 자동으로 다시 띄우지 않는다. 사용자가 "스킬 후보 다시 검토" 같은 명시 요청을 하지 않는 한, 기존 `skills_generated` 목록을 그대로 보존한다. 이전 빌드에서 0개 선택한 경우도 빈 배열을 유지 — "이번엔 만들어볼까"라고 자동 제안하지 않는다.
+**Skill gate idempotency**: in maintenance mode, the Phase 5 gate is not raised again automatically. Unless the user explicitly requests "review skill candidates again", preserve the existing `skills_generated` list as-is. If a previous build chose zero, keep the empty array — do not auto-suggest "maybe try generating some this time".
 
 ---
 
-## 산출물 체크리스트
+## Output checklist
 
-- [ ] `{프로젝트}/.claude/agents/architect.md` — 코어 6 에이전트 모두 `<Project_Context>` 블록 포함
-- [ ] `{프로젝트}/.claude/agents/tdd-leader.md` 및 `team-leader.md` — Opus 고정, `<Project_Context>` 포함
-- [ ] `{프로젝트}/.claude/agents/` — 감지 결과에 매칭되는 조건부 전문가만 생성 (제네릭 "DDD 전문가" 금지)
-- [ ] 전문가 에이전트 프롬프트에 실제 파일 경로·모듈명·도메인 용어가 최소 3개 포함
-- [ ] `{프로젝트}/.claude/skills/` — 사용자 게이트 통과한 후보만 (0개도 정상). 생성됐다면 이름이 프로젝트 모듈명/도메인 용어에서 유도됨 (`migration-check`/`api-workflow` 같은 제네릭 금지)
-- [ ] 생성된 스킬 본문에 실제 파일 경로·import 패턴·모듈명/도메인 용어 최소 3개 주입
-- [ ] `{프로젝트}/CLAUDE.md` — Phase 5 Step 5 임시 동기화 후 Phase 6에서 fingerprint 블록 최종 확정 (`skills_generated`는 빈 배열도 정상)
-- [ ] 재실행 시 fingerprint idempotency 검증
+- [ ] `{project}/.claude/agents/architect.md` — all of the core 6 agents include a `<Project_Context>` block
+- [ ] `{project}/.claude/agents/tdd-leader.md` and `team-leader.md` — pinned to Opus, with `<Project_Context>`
+- [ ] `{project}/.claude/agents/` — only the conditional specialists matching detection are generated (no generic "DDD expert")
+- [ ] Specialist agent prompts contain at least 3 actual file paths / module names / domain terms
+- [ ] `{project}/.claude/skills/` — only the candidates that passed the user gate (zero is valid). If any were generated, the names are derived from project module names / domain terms (no generics like `migration-check` / `api-workflow`)
+- [ ] Generated skill bodies inject at least 3 actual file paths / import patterns / module or domain terms
+- [ ] `{project}/CLAUDE.md` — the Phase 5 Step 5 provisional sync is replaced by the final fingerprint block in Phase 6 (`skills_generated` may legitimately be an empty array)
+- [ ] Re-run idempotency verified via fingerprint
 
-## 참고
+## References
 
-- 백엔드 감지 프로토콜: `references/backend-detection-protocol.md`
-- 프롬프트 주입 가이드: `references/backend-prompt-injection-guide.md`
-- 반복 모듈 감지 + 도메인 용어 추출: `../harness/references/project-analysis-protocol.md`의 §3 재사용
-- 에이전트 설계 패턴: `../harness/references/agent-design-patterns.md`
-- 스킬 작성 가이드: `../harness/references/skill-writing-guide.md`
+- Backend detection protocol: `references/backend-detection-protocol.md`
+- Prompt injection guide: `references/backend-prompt-injection-guide.md`
+- Repeated module detection + domain term extraction: reuse §3 of `../harness/references/project-analysis-protocol.md`
+- Agent design patterns: `../harness/references/agent-design-patterns.md`
+- Skill authoring guide: `../harness/references/skill-writing-guide.md`
